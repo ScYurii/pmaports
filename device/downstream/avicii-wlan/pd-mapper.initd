@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# pd-mapper patched with PD_MAPPER_JSN_DIR: without it the modem never
+# starts wlan_pd (4.19 has no remoteproc class to find the *.jsn files).
+supervisor=supervise-daemon
+name="Qualcomm protection domain mapper"
+command="/usr/lib/avicii-wlan/pd-mapper"
+respawn_delay=1
+output_log="/var/log/pd-mapper.log"
+error_log="/var/log/pd-mapper.log"
+
+start_pre() {
+	export PD_MAPPER_JSN_DIR="${pd_mapper_jsn_dir:-/lib/firmware/postmarketos}"
+}
+
+depend() {
+	need qrtr-ns
+}

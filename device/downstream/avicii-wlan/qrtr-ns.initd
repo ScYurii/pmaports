@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+# QRTR name service: downstream 4.19 has no in-kernel one (qrtr 1.2 dropped
+# the userspace qrtr-ns, this is v1.0).
+supervisor=supervise-daemon
+name="QRTR name service"
+command="/usr/lib/avicii-wlan/qrtr-ns"
+command_args="-f 1"
+respawn_delay=1
+
+depend() {
+	before rmtfs-ro tqftpserv-fw pd-mapper
+}

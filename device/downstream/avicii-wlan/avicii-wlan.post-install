@@ -1,0 +1,5 @@
+#!/bin/sh
+for s in qrtr-ns rmtfs-ro tqftpserv-fw pd-mapper avicii-wlan; do
+	rc-update add "$s" default >/dev/null 2>&1
+done
+exit 0

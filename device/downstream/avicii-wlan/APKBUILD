@@ -1,0 +1,87 @@
+# Wi-Fi for OnePlus Nord (avicii) on the downstream 4.19 kernel without
+# Android: the WLAN firmware runs inside the modem (wlan_pd), so this brings
+# up the modem helpers and replaces vendor cnss-daemon with wlfwd.
+# Upstream tools are patched for kernels without /sys/class/remoteproc and
+# installed privately in /usr/lib/avicii-wlan to not clash with Alpine's.
+maintainer="Yurii <selestyn@gmail.com>"
+pkgname=avicii-wlan
+pkgver=1
+pkgrel=0
+_qrtr_ver=1.0
+_tqftpserv_ver=1.2
+_pdmapper_commit=5ecd2fe926aca7abfe40724177f63b942cff3947
+_wlfwd_ver=0.1.0
+pkgdesc="Wi-Fi bring-up for OnePlus Nord (downstream kernel)"
+url="https://github.com/ScYurii/wlfwd"
+arch="aarch64"
+license="BSD-3-Clause AND GPL-2.0-only"
+depends="rmtfs qrtr-libs"
+makedepends="linux-headers meson qrtr-dev xz-dev zstd-dev"
+install="$pkgname.post-install $pkgname.pre-deinstall"
+source="
+	qrtr-$_qrtr_ver.tar.gz::https://github.com/linux-msm/qrtr/archive/refs/tags/v$_qrtr_ver.tar.gz
+	tqftpserv-$_tqftpserv_ver.tar.gz::https://github.com/linux-msm/tqftpserv/archive/refs/tags/v$_tqftpserv_ver.tar.gz
+	pd-mapper-$_pdmapper_commit.tar.gz::https://github.com/linux-msm/pd-mapper/archive/$_pdmapper_commit.tar.gz
+	wlfwd-$_wlfwd_ver.tar.gz::https://github.com/ScYurii/wlfwd/archive/refs/tags/v$_wlfwd_ver.tar.gz
+	tqftpserv-fw-dir.patch
+	pd-mapper-jsn-dir.patch
+	avicii-wlan.sh
+	qrtr-ns.initd
+	rmtfs-ro.initd
+	tqftpserv-fw.initd
+	pd-mapper.initd
+	avicii-wlan.initd
+	"
+builddir="$srcdir"
+options="!check"
+
+# Stable directory names, so the patches apply from $srcdir via default_prepare
+prepare() {
+	mv qrtr-$_qrtr_ver qrtr
+	mv tqftpserv-$_tqftpserv_ver tqftpserv
+	mv pd-mapper-$_pdmapper_commit pd-mapper
+	mv wlfwd-$_wlfwd_ver wlfwd
+	default_prepare
+}
+
+build() {
+	make -C qrtr qrtr-ns
+
+	meson setup tqftpserv/output tqftpserv \
+		-Dsystemd-unit-prefix=/unused
+	meson compile -C tqftpserv/output
+
+	make -C pd-mapper
+
+	make -C wlfwd CC="${CC:-gcc}"
+}
+
+package() {
+	local lib="$pkgdir"/usr/lib/$pkgname
+
+	install -Dm755 qrtr/qrtr-ns "$lib"/qrtr-ns
+	install -Dm755 tqftpserv/output/tqftpserv "$lib"/tqftpserv
+	install -Dm755 pd-mapper/pd-mapper "$lib"/pd-mapper
+	install -Dm755 wlfwd/wlfwd "$lib"/wlfwd
+	install -Dm755 wlfwd/pdr-restart "$lib"/pdr-restart
+	install -Dm755 avicii-wlan.sh "$lib"/avicii-wlan
+
+	local s
+	for s in qrtr-ns rmtfs-ro tqftpserv-fw pd-mapper avicii-wlan; do
+		install -Dm755 $s.initd "$pkgdir"/etc/init.d/$s
+	done
+}
+sha512sums="
+67d1da9821dc6589504d9d04ad8efbb589f81db70e1fbcdbf5f8ae809428967f09c070c62233a296f39909f4313db8d2215507d3612ff3d8f2d87c4513abe324  qrtr-1.0.tar.gz
+d940aa8c48d20df893b633a870829a42506374c01591ff01c38e7aeb763ed80eb94b647ce72a6e252b41fdf3197b72840c9a23b3552a65ff4a2b140e1d79da19  tqftpserv-1.2.tar.gz
+d8dda67fac505141fc021e66c563672e76dc8202358a2b493db8c4a6034dac27db1a0dcda04406ef001bb62cfcafe7c8f8343a3846c935525407d53551c9f6c4  pd-mapper-5ecd2fe926aca7abfe40724177f63b942cff3947.tar.gz
+0b0d83f12d36f208f01773b3f24c0fdd80fd3b6937bfece4d80c17ed6748f0d63a05fe73dd7bf94bf06fb99d4a5e6e005392eb9505b0628dae1832d9d3bd24b5  wlfwd-0.1.0.tar.gz
+144675ff10f0dad176ec943b9f74a41c529d234caf564408fcabccf584cefde3445e48b0549d05fd84814fa8c71c5bcad4eaa560fdc14e094f28b1837da2375b  tqftpserv-fw-dir.patch
+12b7254c76c90d46e5f4246608496ccb0712823bc234c90b347c396d04980057529e296e5488d62ee1843621de4b6686e5173c7c821b1cbd671d26e1ad955af5  pd-mapper-jsn-dir.patch
+02a1331e86b5a5a1f52010c46f54b051233f58cb200d97ed65533f93f4b7ed5ab84675199883aa64ad7fdd52447e7ba15b9d6dc223d411bb20df6df3752ce038  avicii-wlan.sh
+1862d9700884bf6e35d741bca0db46b513575e3e6757c883c01be1ef4301eb8baa041b1768453bbd9bed5924f89627c4f553d90ab07d0906af0d013f7f52e4d5  qrtr-ns.initd
+775d20c503116a0009fc5124fc93f4826dd3bf0c8d53014ebf8b4fe5cd75015d893251255ee1823a0682f513c9c47c531b4f802f07f7a0c7669832ebdeb3764a  rmtfs-ro.initd
+cead197cafc4c8cccf8f5ba7b09874fcf7e9333857fe5e332e3f4e20742c90d053034aeb7d504383660c767d876711dc41ddf954e136797759b7ee84ebd7f0ce  tqftpserv-fw.initd
+8f236fd5e8c6cff1512b1e6e02800ff5d26e66917e000cd51afc222b8eb876b95c3ac31abf73290c6c107667622e28f3fc29b477ffec1c44a4e0c4e76aab2a30  pd-mapper.initd
+98940451ee9374ed22247ccc091e688286e9f7819bb006d7dfded2001047cc642bc0e877c9f60d88e9d797ca9c540004b7ce9632cc9ad2e83a5bfaa48f5b1dbb  avicii-wlan.initd
+"

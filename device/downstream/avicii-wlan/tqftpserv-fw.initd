@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# tqftpserv patched with TQFTPSERV_FW_DIR: the modem fetches wlanmdsp.mbn
+# over TFTP and 4.19 has no remoteproc class to resolve /readonly/... paths.
+supervisor=supervise-daemon
+name="TFTP server for the modem"
+command="/usr/lib/avicii-wlan/tqftpserv"
+respawn_delay=1
+output_log="/var/log/tqftpserv-fw.log"
+error_log="/var/log/tqftpserv-fw.log"
+
+start_pre() {
+	export TQFTPSERV_FW_DIR="${tqftpserv_fw_dir:-/lib/firmware/postmarketos}"
+}
+
+depend() {
+	need qrtr-ns
+}

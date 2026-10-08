@@ -1,0 +1,54 @@
+Subject: [PATCH] pd-mapper: read *.jsn from PD_MAPPER_JSN_DIR
+
+Downstream 4.19 kernels have no /sys/class/remoteproc to locate the
+domain files; without them the modem never starts wlan_pd.
+
+diff --git a/pd-mapper/pd-mapper.c b/pd-mapper/pd-mapper.c
+index 1167e02..892a750 100644
+--- a/pd-mapper/pd-mapper.c
++++ b/pd-mapper/pd-mapper.c
+@@ -372,6 +372,32 @@ close_class:
+ 	return 0;
+ }
+ 
++/* Downstream kernels have no remoteproc class: take *.jsn from a fixed dir */
++static void pd_add_jsons_from_dir(struct assoc *json_set, const char *dir)
++{
++	char json_path[PATH_MAX];
++	struct dirent *de;
++	size_t len;
++	DIR *d;
++
++	d = opendir(dir);
++	if (!d) {
++		warn("failed to open %s", dir);
++		return;
++	}
++
++	while ((de = readdir(d)) != NULL) {
++		len = strlen(de->d_name);
++		if (len <= 4 || strcmp(&de->d_name[len - 4], ".jsn"))
++			continue;
++		if (snprintf(json_path, sizeof(json_path), "%s/%s", dir, de->d_name) >= (int)sizeof(json_path))
++			continue;
++		assoc_set(json_set, json_path, NULL);
++	}
++
++	closedir(d);
++}
++
+ static int pd_load_maps(void)
+ {
+ 	struct assoc json_set;
+@@ -381,7 +407,10 @@ static int pd_load_maps(void)
+ 
+ 	assoc_init(&json_set, 20);
+ 
+-	pd_enumerate_jsons(&json_set);
++	if (getenv("PD_MAPPER_JSN_DIR"))
++		pd_add_jsons_from_dir(&json_set, getenv("PD_MAPPER_JSN_DIR"));
++	else
++		pd_enumerate_jsons(&json_set);
+ 
+ 	assoc_foreach(jsn, NULL, &json_set, it) {
+ 		ret = pd_load_map(jsn);

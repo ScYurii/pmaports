@@ -1,0 +1,27 @@
+#!/sbin/openrc-run
+# Wi-Fi bring-up on OnePlus Nord (avicii): IPA -> ADSP/CDSP -> modem ->
+# wlfwd (cnss-daemon replacement) -> FW_READY -> /dev/wlan ON.
+# Kill switch: touch /etc/avicii-wlan.disable
+supervisor=supervise-daemon
+name="Wi-Fi bring-up (avicii)"
+command="/usr/lib/avicii-wlan/avicii-wlan"
+output_log="/var/log/avicii-wlan.log"
+error_log="/var/log/avicii-wlan.log"
+# The modem stays up only while the holder runs; don't loop on failures
+respawn_max=2
+respawn_period=600
+
+# No "after dropbear": dropbear needs net, which networkmanager provides,
+# and networkmanager starts after us. That is a dependency loop, and OpenRC
+# may break it by not starting dropbear at all.
+depend() {
+	need qrtr-ns rmtfs-ro tqftpserv-fw pd-mapper
+	before networkmanager
+}
+
+start_pre() {
+	if [ -e /etc/avicii-wlan.disable ]; then
+		eerror "/etc/avicii-wlan.disable exists, not starting"
+		return 1
+	fi
+}

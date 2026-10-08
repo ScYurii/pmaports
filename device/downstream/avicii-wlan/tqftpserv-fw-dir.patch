@@ -1,0 +1,28 @@
+Subject: [PATCH] translate: serve /readonly files from TQFTPSERV_FW_DIR
+
+Downstream 4.19 kernels have no /sys/class/remoteproc, so the modem's
+requests for wlanmdsp.mbn and friends are never resolved. Look the file
+up in a fixed directory first; log what is served.
+
+diff --git a/tqftpserv/translate.c b/tqftpserv/translate.c
+index 409ff95..dfe360b 100644
+--- a/tqftpserv/translate.c
++++ b/tqftpserv/translate.c
+@@ -78,6 +78,17 @@ static int translate_readonly(const char *file)
+ 	int class_fd;
+ 	ssize_t n;
+ 	int fd = -1;
++	const char *fw_dir = getenv("TQFTPSERV_FW_DIR");
++
++	/* Downstream kernels have no remoteproc class: look in a fixed dir */
++	if (fw_dir && !strstr(file, "..")) {
++		if (snprintf(path, sizeof(path), "%s/%s", fw_dir, file) < (int)sizeof(path)) {
++			fd = open(path, O_RDONLY);
++			fprintf(stderr, "[TQFTP] %s %s\n", fd >= 0 ? "served" : "missing", path);
++			if (fd >= 0)
++				return fd;
++		}
++	}
+ 
+ 	read_fw_path_from_sysfs(fw_sysfs_path, sizeof(fw_sysfs_path));
+ 

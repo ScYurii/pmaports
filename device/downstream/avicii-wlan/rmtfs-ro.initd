@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+# rmtfs for avicii: -P read EFS partitions, -r keep the modem's writes in RAM
+# (never touch modemst1/2, fsg, fsc). No -s: it needs remoteproc, absent on 4.19.
+supervisor=supervise-daemon
+name="Qualcomm remote file system (read-only)"
+command="/usr/bin/rmtfs"
+command_args="-P -r"
+respawn_delay=1
+
+depend() {
+	need qrtr-ns
+	after udev-settle
+}
