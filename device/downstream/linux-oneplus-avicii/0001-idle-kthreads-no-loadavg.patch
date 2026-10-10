@@ -1,0 +1,131 @@
+diff --git a/drivers/power/oplus/charger_ic/oplus_battery_msm7250_R.c b/drivers/power/oplus/charger_ic/oplus_battery_msm7250_R.c
+index 5806da58a..7c79c0c48 100755
+--- a/drivers/power/oplus/charger_ic/oplus_battery_msm7250_R.c
++++ b/drivers/power/oplus/charger_ic/oplus_battery_msm7250_R.c
+@@ -1117,7 +1117,7 @@ int smblib_set_charge_param(struct smb_charger *chg,
+ 	smblib_dbg(chg, PR_REGISTER, "%s = %d (0x%02x)\n",
+ 		   param->name, val_u, val_raw);
+ #else
+-	smblib_err(chg, "%s = %d (0x%02x)\n",
++	smblib_dbg(chg, PR_REGISTER, "%s = %d (0x%02x)\n",
+ 		   param->name, val_u, val_raw);
+ #endif
+ 
+diff --git a/drivers/power/oplus/charger_ic/oplus_usbtemp.c b/drivers/power/oplus/charger_ic/oplus_usbtemp.c
+index fca6bf558..bd939fba4 100755
+--- a/drivers/power/oplus/charger_ic/oplus_usbtemp.c
++++ b/drivers/power/oplus/charger_ic/oplus_usbtemp.c
+@@ -631,7 +631,7 @@ int oplus_usbtemp_monitor_common(void *data)
+ 				oplus_usbtemp_set_recover(chip);
+ 			}
+ 		}
+-		msleep(delay);
++		msleep_interruptible(delay);
+ 		if (usbtemp_debug & OPEN_LOG_BIT) {
+ 			pr_err("usbtemp: delay %d",delay);
+ 			chg_err("==================usbtemp_volt_l[%d], usb_temp_l[%d], usbtemp_volt_r[%d], usb_temp_r[%d]\n",
+diff --git a/drivers/power/oplus/gauge_ic/oplus_bq27541.c b/drivers/power/oplus/gauge_ic/oplus_bq27541.c
+index 4fd114fb7..961c4026b 100755
+--- a/drivers/power/oplus/gauge_ic/oplus_bq27541.c
++++ b/drivers/power/oplus/gauge_ic/oplus_bq27541.c
+@@ -346,7 +346,7 @@ static int bq27541_get_gauge_i2c_err(void)
+ 	if (!gauge_ic) {
+ 		return 0;
+ 	}
+-	pr_err("%s gauge_i2c_err = %d suspend = %d\n", __func__, gauge_i2c_err, atomic_read(&gauge_ic->suspended));
++	pr_info("%s gauge_i2c_err = %d suspend = %d\n", __func__, gauge_i2c_err, atomic_read(&gauge_ic->suspended));
+ 
+ 	return gauge_i2c_err;
+ }
+diff --git a/drivers/power/oplus/oplus_charger.c b/drivers/power/oplus/oplus_charger.c
+index a5ac7d324..4f737b225 100755
+--- a/drivers/power/oplus/oplus_charger.c
++++ b/drivers/power/oplus/oplus_charger.c
+@@ -2460,7 +2460,7 @@ static int shortc_thread_main(void *data)
+ 	while (!kthread_should_stop()) {
+ 		set_current_state(TASK_RUNNING);
+ 		oplus_chg_short_c_battery_check(chip);
+-		set_current_state(TASK_UNINTERRUPTIBLE);
++		set_current_state(TASK_IDLE);
+ 		schedule();
+ 	}
+ 	return rc;
+diff --git a/drivers/soc/oplus/system/feedback/kernel_fb.c b/drivers/soc/oplus/system/feedback/kernel_fb.c
+index cbcebd6a6..361f2b46f 100755
+--- a/drivers/soc/oplus/system/feedback/kernel_fb.c
++++ b/drivers/soc/oplus/system/feedback/kernel_fb.c
+@@ -439,7 +439,7 @@ static int fb_flush_thread(void *arg)
+ 					package_release(s);
+ 				}
+ 
+-				msleep(20);
++				msleep_interruptible(20);
+ 			}
+ 		}
+ 	}
+diff --git a/drivers/soc/oplus/system/uboot_log/uboot_log.c b/drivers/soc/oplus/system/uboot_log/uboot_log.c
+index 8566485ae..e93afe794 100755
+--- a/drivers/soc/oplus/system/uboot_log/uboot_log.c
++++ b/drivers/soc/oplus/system/uboot_log/uboot_log.c
+@@ -185,7 +185,7 @@ static int ubootback_thread_fn(void *data)
+ 		}
+ 		seq = kboot_dumper.cur_seq;
+ 		idx = kboot_dumper.cur_idx;
+-		msleep(10*1000);
++		msleep_interruptible(10*1000);
+ 
+ 	}
+ 	return 0;
+diff --git a/drivers/soc/qcom/subsys-pil-tz.c b/drivers/soc/qcom/subsys-pil-tz.c
+index b1f87e1e4..0fc3ba315 100644
+--- a/drivers/soc/qcom/subsys-pil-tz.c
++++ b/drivers/soc/qcom/subsys-pil-tz.c
+@@ -910,7 +910,9 @@ static void log_failure_reason(const struct pil_tz_data *d)
+ 		|| (strncmp(name, "adsp", strlen("adsp")) == 0)){
+ 		strcat(reason, "$$module@@");
+ 		strcat(reason, name);
++#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FEEDBACK)
+ 		oplus_kevent_fb_str(FB_SENSOR, FB_SENSOR_ID_CRASH, reason);
++#endif
+ 	}
+ 	//#endif
+ 	#ifdef OPLUS_FEATURE_MM_FEEDBACK
+diff --git a/kernel/panic_flush.c b/kernel/panic_flush.c
+index 7925c0d1d..7e63e3f3a 100644
+--- a/kernel/panic_flush.c
++++ b/kernel/panic_flush.c
+@@ -41,7 +41,7 @@ static int panic_flush_thread(void *data)
+ repeat:
+ 	if (kthread_should_stop())
+ 		return 0;
+-	wait_event(pfc->flush_wq, kthread_should_stop() ||
++	wait_event_idle(pfc->flush_wq, kthread_should_stop() ||
+ 			atomic_read(&pfc->flush_issuing) > 0);
+ 	if (atomic_read(&pfc->flush_issuing) > 0) {
+ 		iterate_supers(panic_issue_flush, &flush_count);
+diff --git a/techpack/display/msm/dp/dp_hdcp2p2.c b/techpack/display/msm/dp/dp_hdcp2p2.c
+index fcbec753c..df8813396 100644
+--- a/techpack/display/msm/dp/dp_hdcp2p2.c
++++ b/techpack/display/msm/dp/dp_hdcp2p2.c
+@@ -836,7 +836,7 @@ static int dp_hdcp2p2_main(void *data)
+ 	enum hdcp_transport_wakeup_cmd cmd;
+ 
+ 	while (1) {
+-		wait_event(ctrl->wait_q,
++		wait_event_idle(ctrl->wait_q,
+ 			!kfifo_is_empty(&ctrl->cmd_q) ||
+ 			kthread_should_stop() ||
+ 			kthread_should_park());
+diff --git a/techpack/display/msm/sde_hdcp_2x.c b/techpack/display/msm/sde_hdcp_2x.c
+index dbb56c407..a0aa7f93f 100644
+--- a/techpack/display/msm/sde_hdcp_2x.c
++++ b/techpack/display/msm/sde_hdcp_2x.c
+@@ -952,7 +952,7 @@ static int sde_hdcp_2x_main(void *data)
+ 	enum sde_hdcp_2x_wakeup_cmd cmd;
+ 
+ 	while (1) {
+-		wait_event(hdcp->wait_q,
++		wait_event_idle(hdcp->wait_q,
+ 			!kfifo_is_empty(&hdcp->cmd_q) ||
+ 			kthread_should_stop() ||
+ 			kthread_should_park());

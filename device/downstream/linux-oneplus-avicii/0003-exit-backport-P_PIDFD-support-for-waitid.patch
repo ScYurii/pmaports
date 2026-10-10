@@ -1,0 +1,98 @@
+From b9eba33ee2d7554d23365fbe6cc0f990d8e47566 Mon Sep 17 00:00:00 2001
+From: Yurii <selestyn@gmail.com>
+Date: Sat, 10 Oct 2026 14:59:45 +0200
+Subject: [PATCH] exit: backport P_PIDFD support for waitid()
+
+This kernel has pidfd_open() but not waitid(P_PIDFD) (upstream 5.4,
+commit 3695eae5fee0 "pidfd: add P_PIDFD to waitid()"). GLib takes a
+pidfd for every child watch and then waits on it with waitid(P_PIDFD),
+which fails with EINVAL here, so the child's exit status is lost: e.g.
+nm-dispatcher reports every script as "exited with unknown status
+0xffffffff".
+
+Minimal backport: P_PIDFD in the uapi header and a local
+pidfd_get_pid() helper, since pidfd_pid() is not in this tree.
+---
+ include/uapi/linux/wait.h |  1 +
+ kernel/exit.c             | 36 +++++++++++++++++++++++++++++++++---
+ 2 files changed, 34 insertions(+), 3 deletions(-)
+
+diff --git a/include/uapi/linux/wait.h b/include/uapi/linux/wait.h
+index ac49a22..85b809f 100644
+--- a/include/uapi/linux/wait.h
++++ b/include/uapi/linux/wait.h
+@@ -17,6 +17,7 @@
+ #define P_ALL		0
+ #define P_PID		1
+ #define P_PGID		2
++#define P_PIDFD		3
+ 
+ 
+ #endif /* _UAPI_LINUX_WAIT_H */
+diff --git a/kernel/exit.c b/kernel/exit.c
+index c04e172..ec365c3 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -1662,6 +1662,26 @@ end:
+ 	return retval;
+ }
+ 
++static struct pid *pidfd_get_pid(unsigned int fd)
++{
++	struct fd f;
++	struct pid *pid;
++
++	f = fdget(fd);
++	if (!f.file)
++		return ERR_PTR(-EBADF);
++
++	if (f.file->f_op == &pidfd_fops) {
++		pid = f.file->private_data;
++		get_pid(pid);
++	} else {
++		pid = ERR_PTR(-EBADF);
++	}
++
++	fdput(f);
++	return pid;
++}
++
+ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 			  int options, struct rusage *ru)
+ {
+@@ -1684,19 +1704,29 @@ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 		type = PIDTYPE_PID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
+ 		break;
+ 	case P_PGID:
+ 		type = PIDTYPE_PGID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
++		break;
++	case P_PIDFD:
++		type = PIDTYPE_PID;
++		if (upid < 0)
++			return -EINVAL;
++
++		pid = pidfd_get_pid(upid);
++		if (IS_ERR(pid))
++			return PTR_ERR(pid);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	if (type < PIDTYPE_MAX)
+-		pid = find_get_pid(upid);
+-
+ 	wo.wo_type	= type;
+ 	wo.wo_pid	= pid;
+ 	wo.wo_flags	= options;
+-- 
+2.53.0
+

@@ -1,0 +1,40 @@
+From: Yurii <selestyn@gmail.com>
+Subject: [PATCH] oplus/midas: don't look tgid up in the current pid namespace
+
+find_task_by_vpid() resolves the global tgid in the pid namespace of the
+current task. Inside a container it returns NULL and the following
+task->comm dereference panics in timer interrupt
+(midas_record_task_times <- cpufreq_acct_update_power). The thread group
+leader is already reachable through p->group_leader.
+
+---
+diff --git a/drivers/soc/oplus/midas/v1/midas_ioctl.c b/drivers/soc/oplus/midas/v1/midas_ioctl.c
+index 31c3128b5..6c969c676 100755
+--- a/drivers/soc/oplus/midas/v1/midas_ioctl.c
++++ b/drivers/soc/oplus/midas/v1/midas_ioctl.c
+@@ -98,7 +98,6 @@ static void update_or_create_entry_locked(uid_t uid, struct task_struct *p, u64
+ 	unsigned int id_cnt = midas_mmap_buf.cnt;
+ 	unsigned int index = (type == TYPE_PROCESS) ? ID_PID : ID_UID;
+ 	unsigned int id = (type == TYPE_PROCESS) ? task_pid_nr(p) : uid;
+-	struct task_struct *task;
+ 	int i;
+ 
+ 	for (i = 0; i < id_cnt; i++) {
+@@ -120,11 +119,12 @@ static void update_or_create_entry_locked(uid_t uid, struct task_struct *p, u64
+ 		midas_mmap_buf.entrys[i].id[ID_PID] = task_pid_nr(p);
+ 		midas_mmap_buf.entrys[i].id[ID_TGID] = task_tgid_nr(p);
+ 		query_pid_name(p, midas_mmap_buf.entrys[i].pid_name);
+-		/* Get tgid name */
+-		rcu_read_lock();
+-		task = find_task_by_vpid(midas_mmap_buf.entrys[i].id[ID_TGID]);
+-		rcu_read_unlock();
+-		strncpy(midas_mmap_buf.entrys[i].tgid_name, task->comm, TASK_COMM_LEN);
++		/*
++		 * Get tgid name. find_task_by_vpid() looks the global tgid up in
++		 * the current pid namespace and returns NULL inside containers,
++		 * which panicked here in timer interrupt; the leader is at hand.
++		 */
++		strncpy(midas_mmap_buf.entrys[i].tgid_name, p->group_leader->comm, TASK_COMM_LEN);
+ 	}
+ 	/* the unit of time_in_state is ms */
+ 	midas_mmap_buf.entrys[i].time_in_state[state] += DIV_ROUND_CLOSEST(cputime, NSEC_PER_MSEC);

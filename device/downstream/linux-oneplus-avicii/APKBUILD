@@ -1,0 +1,86 @@
+# Reference: <https://postmarketos.org/vendorkernel>
+# Kernel config based on: arch/arm64/configs/vendor/lito-perf_defconfig
+maintainer="Yurii <selestyn@gmail.com>"
+pkgname=linux-oneplus-avicii
+pkgver=4.19.300
+pkgrel=0
+pkgdesc="OnePlus Nord kernel fork"
+arch="aarch64"
+_carch="arm64"
+_flavor="oneplus-avicii"
+url="https://kernel.org"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps pmb:cross-native"
+makedepends="
+	bash
+	bc
+	bison
+	clang
+	devicepkg-dev
+	findutils
+	flex
+	linux-headers
+	openssl-dev
+	perl
+	xz
+"
+
+# кросс-тулчейн ставится в нативный chroot: пакеты существуют только для хоста,
+# а makedepends резолвятся под целевую архитектуру
+makedepends_build="
+	gcc-aarch64
+	g++-aarch64
+"
+
+export CC="clang"
+export HOSTCC="clang"
+
+_repository="android_kernel_oneplus_sm7250"
+_commit="fb4b4374d3b9ad0f10ba38d159585129f092fb3d"
+_config="config-$_flavor.$arch"
+source="
+	$pkgname-$_commit.tar.gz::https://github.com/LineageOS/$_repository/archive/$_commit.tar.gz
+	$_config
+	0001-idle-kthreads-no-loadavg.patch
+	0002-oplus-midas-pidns-null-deref.patch
+	0003-exit-backport-P_PIDFD-support-for-waitid.patch
+"
+
+builddir="$srcdir/$_repository-$_commit"
+_outdir="out"
+
+prepare() {
+	default_prepare
+	REPLACE_GCCH=0 . downstreamkernel_prepare
+}
+
+build() {
+	unset LDFLAGS
+	make O="$_outdir" ARCH="$_carch" CC="${CC:-gcc}" \
+		BRAND_SHOW_FLAG=oneplus \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-postmarketOS"
+}
+
+package() {
+	downstreamkernel_package "$builddir" "$pkgdir" "$_carch" \
+		"$_flavor" "$_outdir"
+
+	# Базовый DTB для mkbootimg (boot header v2). Оверлей устройства
+	# (avicii-overlay.dtbo) не ставим: загрузчик берёт его из штатного
+	# раздела dtbo и накладывает на этот dtb сам.
+	install -Dm644 "$_outdir/arch/arm64/boot/dts/vendor/20801/lito.dtb" \
+		"$pkgdir/boot/dtbs/vendor/20801/lito.dtb"
+
+	make O="$_outdir" ARCH="$_carch" \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_MOD_PATH="$pkgdir" \
+		modules_install
+}
+
+sha512sums="
+edff0b0a5135854f942826c39bfbd56bc07a45e3987c4d1b75c94d1a34a3d7853ee68a4ae6faf1ad7318bf9b4966c2f5287b835ce4472b0789ad91decf3e4b01  linux-oneplus-avicii-fb4b4374d3b9ad0f10ba38d159585129f092fb3d.tar.gz
+d2688911420260fac9d92d65dddcd1ac4be35ad431b112a8b761f0ddf338b99e3e78d89d3bc37166b27bb5f951be44d8a1bfdff64caa836ccbf52b427c3cf6ce  config-oneplus-avicii.aarch64
+8c8ae5a1832b25f1d32a6746800260f2792ed63a1d4d5705f8752b04af63e81b5d12d65aa59eeedb35e19e56cb94cf2bea9060499a9c3898488555ce8ecfa449  0001-idle-kthreads-no-loadavg.patch
+897df378bce63013b89e75f2b5122a445a76ebcbb915963c02e800747dd8574eb5dd3dd26ca6d99751ba9b77213282d5c68aa4cb063460fc25c5af8985c5461b  0002-oplus-midas-pidns-null-deref.patch
+b8bb6c5b900742871dc157506f6d0440f4110918c50a5f26d964d8d1f1bb2439c7d8069ec83d60735c62746d097d441d1f03e0b938dcafee93f0a8a7b674a57d  0003-exit-backport-P_PIDFD-support-for-waitid.patch
+"
