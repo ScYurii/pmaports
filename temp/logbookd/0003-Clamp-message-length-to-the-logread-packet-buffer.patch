@@ -1,0 +1,46 @@
+From 1a5075f1cd5fb1e4642527c3d2b830b91b251b22 Mon Sep 17 00:00:00 2001
+From: Yurii <selestyn@gmail.com>
+Date: Sat, 10 Oct 2026 14:46:34 +0200
+Subject: [PATCH] Clamp message length to the logread packet buffer
+
+log_insert() and the history replay copy the message into a fixed
+MAX_MESSAGE_SIZE stack buffer after a ~20 byte header without checking
+its length. A kernel message close to 1024 bytes (e.g. a long
+"Kernel command line:" record) overflows the buffer, and logbookd dies
+on the stack protector right after reading /dev/kmsg at boot.
+
+Truncate the copy for logread clients; the full message is still
+stored in the database.
+---
+ main.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/main.c b/main.c
+index a2b332b..0e14b08 100644
+--- a/main.c
++++ b/main.c
+@@ -172,6 +172,10 @@ log_insert(int src, char *msg, long sent, int sev, int fac, char *hostname, char
+ 	packet_ptr = write_int8(packet_ptr, sev);
+ 	packet_ptr = write_int8(packet_ptr, fac);
+ 	packet_ptr = write_varchar(packet_ptr, app);
++	size_t room = sizeof(packet) - (size_t) (packet_ptr - packet) - 1;
++	if ((size_t) msglen > room) {
++		msglen = (int) room;
++	}
+ 	memcpy(packet_ptr, msg, msglen);
+ 	packet_ptr += msglen;
+ 	*packet_ptr++ = '\0';
+@@ -554,6 +558,10 @@ do_query(int client, unsigned char *cmd, ssize_t size)
+ 		const unsigned char *msg = sqlite3_column_text(stmt, 5);
+ 		int msglen = msg != NULL ? (int) strlen((char *) msg) : 0;
+ 		packet_ptr = write_varchar(packet_ptr, app != NULL ? (char *) app : "");
++		size_t room = sizeof(packet) - (size_t) (packet_ptr - packet) - 1;
++		if ((size_t) msglen > room) {
++			msglen = (int) room;
++		}
+ 		memcpy(packet_ptr, msg, msglen);
+ 		packet_ptr += msglen;
+ 		*packet_ptr++ = '\0';
+-- 
+2.53.0
+
