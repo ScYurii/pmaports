@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+
+description="Copy vendor firmware from the phone partitions on first boot"
+
+depend() {
+	need localmount
+	before rmtfs-ro tqftpserv-fw avicii-wlan
+}
+
+start() {
+	ebegin "Checking vendor firmware"
+	/usr/libexec/avicii-firmware
+	eend $?
+}

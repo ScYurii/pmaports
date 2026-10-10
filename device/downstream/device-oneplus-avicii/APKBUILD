@@ -1,0 +1,52 @@
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="Yurii <selestyn@gmail.com>"
+pkgname=device-oneplus-avicii
+pkgver=1
+pkgrel=0
+pkgdesc="OnePlus Nord"
+url="https://postmarketos.org"
+arch="aarch64"
+license="MIT"
+depends="
+	avicii-wlan
+	font-terminus
+	linux-oneplus-avicii
+	mkbootimg
+	msm-firmware-loader
+	soc-qcom-qbootctl
+	swclock-offset
+	postmarketos-base
+	postmarketos-base-downstream
+	"
+makedepends="devicepkg-dev"
+install="$pkgname.post-install $pkgname.post-upgrade"
+source="
+	deviceinfo
+	kernel-cmdline.conf
+	modules-initfs
+	avicii-qbootctl.initd
+	avicii-firmware.initd
+	avicii-firmware.sh
+	"
+options="!archcheck !check"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+
+	install -Dm755 "$srcdir"/avicii-qbootctl.initd "$pkgdir"/etc/init.d/avicii-qbootctl
+	install -Dm755 "$srcdir"/avicii-firmware.initd "$pkgdir"/etc/init.d/avicii-firmware
+	install -Dm755 "$srcdir"/avicii-firmware.sh "$pkgdir"/usr/libexec/avicii-firmware
+}
+
+sha512sums="
+f99b8ccf75299d7dad2666a8015e28bf7ba35539960205433674ec4d25c08996098e48c18c9a85f565765c2328055540c706d702cfd04e1acb71df2f7baa4594  deviceinfo
+8d3df5aa693d6e2bf17aa35971a29cf533fcef100f8be61701c5d2b550957a4bd14adbeea207ae0ab74e3f8feea8dba17205b9dbbe36a6029ad732e2ad9cbc78  kernel-cmdline.conf
+0160d39f32da6d952eaca8c376cc5360ab7ca8e34d442d9159b08a43f20150321cfe3cf0de8fa68105120f7cea628888576d4fcaed0e0ed00a0aef5399d45cf1  modules-initfs
+0e3292379efa33d9a75769a1ffdb0dc239ce89bb2d0b0a08ff5cfc67feb2ea1b9d9c51bd080c131d4224b79ec334c2f59bb3c363c909f2234f555d1e0ca9aeac  avicii-qbootctl.initd
+a2a39ef5eef9c5d35e7946a893da3a8a0fd07e2d40ddf5ae76d25047efcac91f70adfcdae4e92679cc26502cf437eeff17ee8207226776a3353116d40860238c  avicii-firmware.initd
+85b92ba1c2661394987a996b53b408bcb6be0d3a6a9b57967abc6237ab530ac98c1eb6d2e924446753deab4c86d16b52a978c713db89eb6c2645ffb3c3084b59  avicii-firmware.sh
+"

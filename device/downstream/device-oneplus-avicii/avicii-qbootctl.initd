@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+# On A/B devices the bootloader lowers slot-retry-count on every boot and
+# switches to the other slot (Android) when it reaches zero, which ends in a
+# reboot loop. The packaged qbootctl service is a daemon and does not work
+# with OpenRC, so mark the slot as successful once per boot here.
+description="Mark the current A/B slot as successfully booted"
+
+depend() {
+	need localmount
+}
+
+start() {
+	ebegin "Marking boot slot as successful"
+	qbootctl -m >/dev/null
+	eend $?
+}

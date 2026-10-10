@@ -1,0 +1,15 @@
+#!/bin/sh
+# Idempotent: also used as post-upgrade.
+
+rc-update add avicii-qbootctl boot >/dev/null 2>&1
+rc-update add avicii-firmware boot >/dev/null 2>&1
+
+# Replaced by avicii-firmware, see /usr/libexec/avicii-firmware
+rc-update del msm-firmware-loader sysinit >/dev/null 2>&1
+
+# The vendor kernel only has an 8x16 font, which is tiny on the 1080p panel.
+# /etc/conf.d/consolefont belongs to openrc, so edit it in place.
+sed -i 's/^#\?consolefont=.*/consolefont="ter-v32b.psf.gz"/' /etc/conf.d/consolefont
+rc-update add consolefont boot >/dev/null 2>&1
+
+exit 0
