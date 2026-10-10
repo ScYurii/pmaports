@@ -3,7 +3,7 @@
 maintainer="Yurii <selestyn@gmail.com>"
 pkgname=linux-oneplus-avicii
 pkgver=4.19.300
-pkgrel=0
+pkgrel=6
 pkgdesc="OnePlus Nord kernel fork"
 arch="aarch64"
 _carch="arm64"

@@ -6,7 +6,7 @@
 maintainer="Yurii <selestyn@gmail.com>"
 pkgname=avicii-wlan
 pkgver=1
-pkgrel=0
+pkgrel=2
 _qrtr_ver=1.0
 _tqftpserv_ver=1.2
 _pdmapper_commit=5ecd2fe926aca7abfe40724177f63b942cff3947

@@ -2,7 +2,7 @@
 maintainer="Yurii <selestyn@gmail.com>"
 pkgname=device-oneplus-avicii
 pkgver=1
-pkgrel=0
+pkgrel=8
 pkgdesc="OnePlus Nord"
 url="https://postmarketos.org"
 arch="aarch64"
