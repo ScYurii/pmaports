@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+description="Сборщик метрик для дашборда avicii-monitor"
+
+supervisor=supervise-daemon
+command=/usr/sbin/avicii-monitor
+output_log=/var/log/avicii-monitor.log
+error_log=/var/log/avicii-monitor.log
+respawn_delay=10
+
+depend() {
+	after avicii-chglimit docker
+}

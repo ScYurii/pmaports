@@ -1,0 +1,85 @@
+# Running the OnePlus Nord (avicii) as an always-on home server:
+# - avicii-chglimit: keeps the battery between 70 and 80% on mains power
+#   (OPLUS mmi_charging_enable + input_suspend)
+# - avicii-power: live power draw in the terminal
+# - avicii-monitor: metrics collector and web dashboard on port 8080
+# - Docker workarounds for the downstream 4.19 kernel (crun instead of runc,
+#   iptables-legacy, cgroup v1, no schedtune), docker enabled at boot
+# - bash and the docker group for the default user
+maintainer="Yurii <selestyn@gmail.com>"
+pkgname=avicii-server
+pkgver=1
+pkgrel=1
+pkgdesc="Home server setup for OnePlus Nord (downstream kernel)"
+url="https://postmarketos.org"
+arch="aarch64"
+license="GPL-3.0-or-later"
+depends="
+	bash
+	bash-completion
+	busybox-extras
+	crun
+	docker
+	docker-bash-completion
+	docker-openrc
+	iptables-legacy
+	iw
+	python3
+	shadow
+	"
+install="$pkgname.post-install $pkgname.post-upgrade $pkgname.pre-deinstall"
+source="
+	avicii-chglimit.sh
+	avicii-chglimit.initd
+	avicii-chglimit.confd
+	avicii-power.sh
+	avicii-monitor.py
+	avicii-monitor.initd
+	avicii-monitor-web.initd
+	avicii-monitor.html
+	avicii-monitor-httpd.conf
+	avicii-docker-daemon.json
+	avicii-docker-modules.conf
+	avicii-user-setup.sh
+	avicii-user-setup.initd
+	"
+builddir="$srcdir"
+options="!check"
+
+package() {
+	install -Dm755 avicii-chglimit.sh "$pkgdir"/usr/sbin/avicii-chglimit
+	install -Dm755 avicii-chglimit.initd "$pkgdir"/etc/init.d/avicii-chglimit
+	install -Dm644 avicii-chglimit.confd "$pkgdir"/etc/conf.d/avicii-chglimit
+	install -Dm755 avicii-power.sh "$pkgdir"/usr/bin/avicii-power
+
+	install -Dm755 avicii-monitor.py "$pkgdir"/usr/sbin/avicii-monitor
+	install -Dm755 avicii-monitor.initd "$pkgdir"/etc/init.d/avicii-monitor
+	install -Dm755 avicii-monitor-web.initd "$pkgdir"/etc/init.d/avicii-monitor-web
+	install -Dm644 avicii-monitor.html "$pkgdir"/usr/share/avicii-monitor/www/index.html
+	install -Dm644 avicii-monitor-httpd.conf "$pkgdir"/usr/share/avicii-monitor/httpd.conf
+	ln -s /run/avicii-monitor "$pkgdir"/usr/share/avicii-monitor/www/data
+
+	install -Dm644 avicii-docker-daemon.json "$pkgdir"/etc/docker/daemon.json
+	install -Dm644 avicii-docker-modules.conf "$pkgdir"/etc/modules-load.d/avicii-docker.conf
+	mkdir -p "$pkgdir"/usr/lib/$pkgname/docker-bin
+	ln -s /usr/bin/iptables-legacy "$pkgdir"/usr/lib/$pkgname/docker-bin/iptables
+	ln -s /usr/bin/ip6tables-legacy "$pkgdir"/usr/lib/$pkgname/docker-bin/ip6tables
+
+	install -Dm755 avicii-user-setup.sh "$pkgdir"/usr/libexec/avicii-user-setup
+	install -Dm755 avicii-user-setup.initd "$pkgdir"/etc/init.d/avicii-user-setup
+}
+sha512sums="
+f4d2f56e24940e0d8eb3b6bb5ecbe43de07c54c3d23050009d136420aab5adda53532fbabce1d9f59fc72dd5b118864767ba708814a47456759a9176048a4eaa  avicii-chglimit.sh
+050e8cd8a02fbf3c969b02a823a5cc22af3f797164875d63b08ff011101300e8a6781a512ad37e768dd438b346c2271fdd4baca90d2ddf7ed0dc72fbe65f2724  avicii-chglimit.initd
+845c5969f4b46082b75f688fc3eeb2a51463ece39c23bdf00d3c064dd03b1af6a90e7ca1f40abfced0d76db7af506920c5f9aab8a1052a001511684d3ecfada7  avicii-chglimit.confd
+cb4ec2f8d48f4171f5b21d52bb57693b1bd0edc36cb5dae68c048b17e78fb1ebb66aee6cdc49ba4f702b6c53a4feb6994c180a94a7aaaa5cb7082cd3ff29ee8a  avicii-power.sh
+6704bb45705b1a38400716a41108f158c8e59805ab42af24a9fa5d07f4aab13081e4637e8962c1d57592384ff0a2c25b81fd5d286e24b152826c8aa8095bb6be  avicii-monitor.py
+eb5841f7ee12ed5430d9f0ed440716403f6a3bf6d100f01d720c1264f58160e4e4ffd6f170a591a2a287898f228d56e9d1a0f4b32d03441f2afbe087c2fa2ea8  avicii-monitor.initd
+8c1adb9df238cbdd3350cef13e76a7ee0766ca763131d262ca6f20614dcc2a4be4831497536e105c2a5a674125791199dc0b62b9c2978d0f643b5c5a47be1bf0  avicii-monitor-web.initd
+dbec3f2f51952383506f32798f94bb23ac969673bdac09954cbc246455da2eb27a3dfbcef5499640e7d7dbc49f33d624393f0e8a62eafe4cdf3e538d7341ea27  avicii-monitor.html
+64402a4ec41ae762bc24f9b06ee6983dddf004fc7153ac322e945c39d2bb705688a33c8e2af2aac94dd2f20eaab650a6fdd72ba6650bc20ef2876bf0dac2adc2  avicii-monitor-httpd.conf
+1d864c675bd6f68d6bda084f7a554a75209b04c60fb1a6e759c03737bb69e4e297f90b6afc5078bfd5aec60ea43a1003ce120eeb32e9e20e18b707d9d1f9e41b  avicii-docker-daemon.json
+0633439067fae549fc723ea1fab34404af898a6d7079fe648837b08f22c688111035e73ecf527cadca9ab78cd8a48032d8c960aac7536b1a171e3c0d314bfbd1  avicii-docker-modules.conf
+2f85bdece9385ba94f502f1baeecd96d0d877502df3e9856ae2af09f5d82979309d421af8a36ce07f3b8b29668b27d96a484713af0631e178519fcc874bc450b  avicii-user-setup.sh
+8b693d6c26cb0f7b0a9d43cffaf0f8e5a7c0854b953bfd92f672cc3a3161b77a3e68d5a02c90fe3161baca3e07e247bf119e1d4a4f04e410cbd538f1fd1f2250  avicii-user-setup.initd
+"

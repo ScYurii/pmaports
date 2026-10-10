@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+description="Ограничение заряда батареи для работы от сети"
+
+supervisor=supervise-daemon
+command=/usr/sbin/avicii-chglimit
+output_log=/var/log/avicii-chglimit.log
+error_log=/var/log/avicii-chglimit.log
+respawn_delay=10
+
+start_pre() {
+	export CHG_MAX CHG_MIN INTERVAL
+}

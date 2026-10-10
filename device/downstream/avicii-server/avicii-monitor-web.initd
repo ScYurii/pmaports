@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+description="Веб-сервер дашборда avicii-monitor (порт 8080)"
+
+supervisor=supervise-daemon
+command=/bin/busybox-extras
+command_args="httpd -f -p ${PORT:-8080} -h /usr/share/avicii-monitor/www -c /usr/share/avicii-monitor/httpd.conf -u nobody:nogroup"
+respawn_delay=10
+
+depend() {
+	need net
+	after avicii-monitor
+}

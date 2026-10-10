@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>avicii — мониторинг</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='5' y='1' width='6' height='14' rx='1.5' fill='%2316a34a'/></svg>">
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --line: #e3e5ea; --text: #16181d; --muted: #6b7280; --faint: #9aa1ad;
+  --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+  --c-power: #2563eb; --c-power-2: #93b4f5; --c-cap: #16a34a; --c-band: rgba(22,163,74,.10);
+  --c-batt: rgba(217,119,6,.13); --c-tb: #d97706; --c-tc: #7c3aed; --c-sig: #0891b2;
+  --c-cpu: #e11d48; --c-cpu-2: #f4a3b5; --c-iow: #64748b; --c-mem: #0d9488; --c-cache: #94a3b8;
+  --shadow: 0 1px 2px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1014; --panel: #171a20; --line: #262a33; --text: #e7e9ee; --muted: #9098a6; --faint: #646b78;
+    --accent: #60a5fa; --ok: #22c55e; --warn: #f59e0b; --bad: #f87171;
+    --c-power: #60a5fa; --c-power-2: #2b4a7a; --c-cap: #22c55e; --c-band: rgba(34,197,94,.10);
+    --c-batt: rgba(245,158,11,.14); --c-tb: #f59e0b; --c-tc: #a78bfa; --c-sig: #22d3ee;
+    --c-cpu: #fb7185; --c-cpu-2: #7a2e3f; --c-iow: #94a3b8; --c-mem: #2dd4bf; --c-cache: #64748b;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+header .sub { color: var(--muted); }
+.live { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+
+.grid { display: grid; gap: 14px; }
+.tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 14px; }
+.main { grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1000px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .main { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .tiles { grid-template-columns: 1fr; } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.card h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+.big { font-size: 30px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; }
+.big small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 6px; }
+.meta b { color: var(--text); font-weight: 600; }
+
+.capbar { position: relative; height: 8px; border-radius: 4px; background: var(--line); margin-top: 10px; overflow: visible; }
+.capbar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--c-cap); }
+.capbar .win { position: absolute; top: -3px; bottom: -3px; border: 1.5px dashed var(--muted); border-radius: 4px; }
+
+.cl { display: grid; grid-template-columns: 62px 1fr 74px; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 5px; }
+.cl .meter { margin: 0; }
+.cl .meter i { background: var(--c-cpu); }
+.cl span:last-child { text-align: right; }
+.stack { display: flex; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 10px; }
+.stack i { display: block; height: 100%; }
+.bars { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; margin-right: 6px; vertical-align: -1px; }
+.bars i { width: 4px; background: var(--line); border-radius: 1px; }
+.bars i.on { background: var(--c-sig); }
+
+.charts .card { margin-bottom: 14px; }
+.chart-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+.chart-head h2 { margin: 0; }
+.legend { display: flex; gap: 12px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; border-radius: 2px; background: var(--c); margin-right: 5px; vertical-align: 3px; }
+.legend span.box::before { height: 10px; vertical-align: -1px; }
+.chart { position: relative; height: 170px; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 13px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.12); z-index: 2; }
+.tip .t { color: var(--muted); margin-bottom: 2px; }
+
+.range { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; margin-bottom: 14px; }
+.range button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 5px 14px; border-radius: 6px; cursor: pointer; }
+.range button.on { background: var(--accent); color: #fff; }
+
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar .range { margin-bottom: 0; }
+.zoominfo { font-size: 13px; color: var(--muted); }
+.zoominfo b { color: var(--text); font-weight: 600; }
+.paused { color: var(--warn); }
+.hint { font-size: 12px; color: var(--faint); }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+[hidden] { display: none !important; }
+.chart svg { touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.st .l { font-size: 12px; color: var(--muted); }
+.st .v { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin-top: 2px; }
+.st .v small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.st .s { font-size: 12px; color: var(--faint); margin-top: 1px; }
+.sumfoot { font-size: 12px; color: var(--faint); margin-top: 10px; }
+.sumev { margin-top: 8px; }
+.sumev .when { color: var(--faint); font-size: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; }
+.meter { height: 5px; background: var(--line); border-radius: 3px; margin-top: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+
+.list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.list li { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-top: 1px solid var(--line); }
+.list li:first-child { border-top: 0; }
+.list .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .state { color: var(--muted); font-size: 12px; }
+.ev { max-height: 420px; overflow-y: auto; }
+.ev li { align-items: flex-start; }
+.ev .dot { margin-top: 6px; }
+.ev .when { color: var(--faint); font-size: 12px; white-space: nowrap; }
+.side .card { margin-bottom: 14px; }
+.muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>avicii</h1><span class="sub">OnePlus Nord · postmarketOS</span>
+    <div class="live"><span class="dot" id="liveDot"></span><span id="liveText">загрузка…</span></div>
+  </header>
+
+  <section class="grid tiles">
+    <div class="card">
+      <h2>Потребление</h2>
+      <div class="big" id="tPower">—</div>
+      <div class="meta" id="tPowerMeta">&nbsp;</div>
+    </div>
+    <div class="card">
+      <h2>Питание</h2>
+      <div class="big" id="tSrc">—</div>
+      <div class="meta" id="tMode">&nbsp;</div>
+    </div>
+    <div class="card">
+      <h2>Батарея</h2>
+      <div class="big" id="tCap">—</div>
+      <div class="capbar"><div class="fill" id="capFill"></div><div class="win" id="capWin"></div></div>
+      <div class="meta" id="tBatt">&nbsp;</div>
+    </div>
+    <div class="card">
+      <h2>Процессор</h2>
+      <div class="big" id="tCpu">—</div>
+      <div id="tCl"></div>
+    </div>
+    <div class="card">
+      <h2>Память</h2>
+      <div class="big" id="tMem">—</div>
+      <div class="stack"><i id="memUsed" style="background:var(--c-mem)"></i><i id="memCache" style="background:var(--c-cache)"></i></div>
+      <div class="meta" id="tMemMeta">&nbsp;</div>
+    </div>
+    <div class="card">
+      <h2>Wi-Fi</h2>
+      <div class="big" id="tSig">—</div>
+      <div class="meta" id="tWifi">&nbsp;</div>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="range" id="range">
+      <button data-r="1h" class="on">1 час</button><button data-r="24h">24 часа</button><button data-r="7d">7 дней</button>
+    </div>
+    <span class="zoominfo" id="zoomInfo" hidden></span>
+    <button class="btn" id="btnBack" hidden title="Esc">← Назад</button>
+    <button class="btn" id="btnReset" hidden title="Двойной клик по графику">Сбросить</button>
+    <span class="hint" id="hint">Выделите участок мышью на любом графике, чтобы увеличить</span>
+  </div>
+
+  <section class="grid main">
+    <div class="charts">
+      <div class="card summary">
+        <h2 id="sumTitle">Сводка</h2>
+        <div id="sumBody"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Потребление, Вт</h2>
+          <div class="legend"><span style="--c:var(--c-power)">среднее</span><span class="box" style="--c:color-mix(in srgb, var(--c-power) 25%, transparent)">разброс мин–макс</span><span class="box" style="--c:var(--c-batt)">от батареи</span></div></div>
+        <div class="chart" id="chPower"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Заряд батареи, %</h2>
+          <div class="legend"><span style="--c:var(--c-cap)">заряд</span><span class="box" style="--c:var(--c-band)">окно сервиса</span></div></div>
+        <div class="chart" id="chCap"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Загрузка CPU, %</h2>
+          <div class="legend"><span style="--c:var(--c-cpu)">среднее</span><span class="box" style="--c:color-mix(in srgb, var(--c-cpu) 25%, transparent)">разброс мин–макс</span><span style="--c:var(--c-iow)">ожидание диска</span></div></div>
+        <div class="chart" id="chCpu"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Память, ГБ</h2>
+          <div class="legend"><span style="--c:var(--c-mem)">занято</span><span style="--c:var(--c-cache)">кэш</span></div></div>
+        <div class="chart" id="chMem"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Температура, °C</h2>
+          <div class="legend"><span style="--c:var(--c-tb)">батарея</span><span style="--c:var(--c-tc)">CPU</span></div></div>
+        <div class="chart" id="chTemp"></div>
+      </div>
+      <div class="card">
+        <div class="chart-head"><h2>Сигнал Wi-Fi, дБм</h2></div>
+        <div class="chart" id="chSig" style="height:120px"></div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Система</h2>
+        <dl class="kv" id="sys"></dl>
+      </div>
+      <div class="card">
+        <h2>Сервисы</h2>
+        <ul class="list" id="svc"></ul>
+      </div>
+      <div class="card">
+        <h2>Docker</h2>
+        <ul class="list" id="docker"></ul>
+      </div>
+      <div class="card">
+        <h2>События</h2>
+        <ul class="list ev" id="events"></ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const D = "data/";
+const S = { now: null, hist: [], events: [], view: { preset: "1h" }, stack: [], drawn: null, lastPreset: "1h" };
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pad = n => String(n).padStart(2, "0");
+const hhmm = t => { const d = new Date(t * 1000); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+const ddmm = t => { const d = new Date(t * 1000); return pad(d.getDate()) + "." + pad(d.getMonth() + 1); };
+const full = t => { const d = new Date(t * 1000); return ddmm(t) + " " + hhmm(t) + ":" + pad(d.getSeconds()); };
+const fmt = (v, n = 2) => v == null ? "—" : Number(v).toFixed(n).replace(".", ",");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function dur(s) {
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d} д ${h} ч`;
+  if (h) return `${h} ч ${m} мин`;
+  if (m) return `${m} мин`;
+  return `${s} с`;
+}
+function ago(t) {
+  const s = Date.now() / 1000 - t;
+  if (s < 60) return "только что";
+  if (s < 3600) return Math.floor(s / 60) + " мин назад";
+  if (s < 86400) return Math.floor(s / 3600) + " ч назад";
+  return ddmm(t) + " " + hhmm(t);
+}
+
+async function get(name) {
+  const r = await fetch(D + name, { cache: "no-store" });
+  if (!r.ok) throw new Error(name + ": " + r.status);
+  return r.json();
+}
+
+/* ---------- данные: уровни детализации ---------- */
+const PRESETS = { "1h": 3600, "24h": 86400, "7d": 7 * 86400 };
+const TIERS = {
+  raw:  { step: 5,   chunk: 3600,  dir: "raw", ext: "csv",  gap: 20,  label: "5 с" },
+  min:  { step: 60,  chunk: 86400, dir: "min", ext: "json", gap: 180, label: "1 мин" },
+  hist: { step: 300,                           gap: 900,  label: "5 мин" },
+};
+const MIN_SPAN = 60;
+const chunks = new Map();     // путь → { at, rows, final }
+
+const rowsOf = d => d.rows.map(r => Object.fromEntries(d.fields.map((f, i) => [f, r[i]])));
+
+function parseCsv(text) {
+  const lines = text.trim().split("\n"), fields = lines.shift().split(",");
+  return lines.map(l => {
+    const v = l.split(","), r = {};
+    fields.forEach((f, i) => { const x = v[i]; r[f] = x === "" || x == null ? null : isNaN(x) ? x : +x; });
+    return r;
+  });
+}
+
+async function getChunk(tier, key) {
+  const T = TIERS[tier], path = `${T.dir}/${key}.${T.ext}`, c = chunks.get(path);
+  if (c && (c.final || Date.now() - c.at < 4000)) return c.rows;
+  let rows = [];
+  try {
+    const r = await fetch(D + path, { cache: "no-store" });
+    if (r.ok) rows = T.ext === "csv" ? parseCsv(await r.text()) : rowsOf(await r.json());
+  } catch (e) { /* куска нет — до запуска сборщика или уже удалён */ }
+  // кусок окончательный, если его время целиком в прошлом — тогда больше не перезапрашиваем
+  chunks.set(path, { at: Date.now(), rows, final: (key + 1) * T.chunk < Date.now() / 1000 - 2 * T.step });
+  return rows;
+}
+
+function normalize(tier, rows) {
+  const half = TIERS[tier].step / 2;
+  return rows.map(r => ({
+    ...r, _tier: tier,
+    pmax: r.pmax ?? null, cpumax: r.cpumax ?? null,
+    batt: tier === "raw" ? r.cable === 0 : (r.batt_s ?? 0) >= half,
+    mu: r.mu == null ? null : r.mu / 1024, mc: r.mc == null ? null : r.mc / 1024,
+  }));
+}
+
+async function loadTier(tier, t0, t1) {
+  const T = TIERS[tier];
+  let rows;
+  if (tier === "hist") rows = S.hist;
+  else {
+    const keys = [];
+    for (let k = Math.floor(t0 / T.chunk); k <= Math.floor(t1 / T.chunk); k++) keys.push(k);
+    rows = (await Promise.all(keys.map(k => getChunk(tier, k)))).flat();
+  }
+  return normalize(tier, rows.filter(r => r.t >= t0 - T.step && r.t <= t1 + T.step));
+}
+
+/* Начинаем с уровня, подходящего по ширине интервала. Где подробных данных нет (до запуска сборщика,
+   после перезагрузки сырые замеры теряются), дополняем края более грубыми уровнями. */
+async function loadView(t0, t1) {
+  const span = t1 - t0, order = ["raw", "min", "hist"];
+  const first = span <= 2 * 3600 ? 0 : span <= 36 * 3600 ? 1 : 2;
+  let rows = [], used = [];
+  for (let i = first; i < order.length; i++) {
+    const tier = order[i], step = TIERS[tier].step;
+    const covered = rows.length ? [rows[0].t, rows[rows.length - 1].t] : null;
+    if (covered && covered[0] - t0 <= step && t1 - covered[1] <= step) break;
+    const add = (await loadTier(tier, t0, t1)).filter(r => !covered || r.t < covered[0] - step || r.t > covered[1] + step);
+    if (!add.length) continue;
+    rows = rows.concat(add).sort((a, b) => a.t - b.t);
+    used.push(tier);
+  }
+  return { tier: used[0] || order[first], tiers: used, rows };
+}
+
+/* Раскладка по равным интервалам шириной ~3 px: в каждом — среднее и разброс (мин–макс).
+   Так шум 5-секундных замеров и стыки уровней разной детализации не превращаются в «гребёнку»,
+   а пики остаются видны полосой. При сильном увеличении в интервал попадает одна точка — она и рисуется. */
+const AVG_KEYS = ["p", "cap", "tb", "tc", "load", "mem", "sig", "cpu", "iow", "mu", "mc"];
+const BAND_KEYS = { p: "pmax", cpu: "cpumax" };
+function bucketize(rows, t0, t1, n) {
+  const w = (t1 - t0) / n, out = [];
+  let cur = null, idx = null;
+  const flush = () => {
+    if (!cur) return;
+    const o = { t: cur.tsum / cur.n, _tier: cur._tier, batt: cur.batt, cap: cur.cap };
+    for (const k of AVG_KEYS) if (k !== "cap") o[k] = cur.c[k] ? cur.s[k] / cur.c[k] : null;
+    for (const k of Object.keys(BAND_KEYS)) { o[k + "_lo"] = cur.lo[k] ?? null; o[k + "_hi"] = cur.hi[k] ?? null; }
+    out.push(o);
+  };
+  for (const r of rows) {
+    const b = Math.floor((r.t - t0) / w);
+    if (b !== idx) { flush(); idx = b; cur = { tsum: 0, n: 0, s: {}, c: {}, lo: {}, hi: {}, batt: false, cap: null, _tier: r._tier }; }
+    cur.tsum += r.t; cur.n++;
+    for (const k of AVG_KEYS) if (r[k] != null) { cur.s[k] = (cur.s[k] || 0) + r[k]; cur.c[k] = (cur.c[k] || 0) + 1; }
+    for (const [k, mx] of Object.entries(BAND_KEYS)) {
+      if (r[k] != null) cur.lo[k] = Math.min(cur.lo[k] ?? Infinity, r[k]);
+      const h = r[mx] ?? r[k];
+      if (h != null) cur.hi[k] = Math.max(cur.hi[k] ?? -Infinity, h);
+    }
+    if (r.cap != null) cur.cap = r.cap;
+    if (r._tier !== "raw") cur._tier = r._tier;     // разрывы считаем по самому грубому уровню в интервале
+    cur.batt = cur.batt || r.batt;
+  }
+  flush();
+  return out;
+}
+
+/* ---------- графики ---------- */
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(s => s >= raw) || raw;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+const TIME_STEPS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
+const hhmmss = t => hhmm(t) + ":" + pad(new Date(t * 1000).getSeconds());
+
+const CHARTS = [];             // все графики — для общего курсора
+function hoverAll(t) { for (const c of CHARTS) c.hover?.(t); }
+
+function chart(el, opt) {
+  const W = el.clientWidth, H = el.clientHeight;
+  const m = { l: 40, r: 8, t: 8, b: 22 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const { t0, t1, series, gap } = opt;
+  const inView = p => p[1] != null && p[0] >= t0 - gap && p[0] <= t1 + gap;
+  el._chart = null;
+  if (series[0].data.filter(inView).length < 2) {
+    el.innerHTML = `<div class="empty">${opt.empty || "Нет данных за этот интервал"}</div>`;
+    return;
+  }
+  const pts = series.flatMap(s => [s.data, ...(s.band || [])].flatMap(d => d.filter(inView)));
+  let lo = opt.yMin ?? Math.min(...pts.map(p => p[1]));
+  let hi = opt.yMax ?? Math.max(...pts.map(p => p[1]));
+  if (opt.yPad) { const pd = (hi - lo || Math.abs(hi) || 1) * opt.yPad; if (opt.yMin == null) lo -= pd; if (opt.yMax == null) hi += pd; }
+  if (opt.floor != null) lo = Math.max(lo, opt.floor);
+  if (hi - lo < (opt.minSpan || 0)) { const c = (hi + lo) / 2; lo = c - opt.minSpan / 2; hi = c + opt.minSpan / 2; if (opt.floor != null && lo < opt.floor) { hi += opt.floor - lo; lo = opt.floor; } }
+  const ticks = niceTicks(lo, hi);
+  lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  const X = t => m.l + (t - t0) / (t1 - t0) * iw;
+  const T = x => t0 + (x - m.l) / iw * (t1 - t0);
+  const Y = v => m.t + ih - (v - lo) / (hi - lo || 1) * ih;
+  const clampX = x => Math.max(m.l, Math.min(m.l + iw, x));
+  const line = css("--line"), faint = css("--faint");
+  let g = `<defs><clipPath id="clip-${el.id}"><rect x="${m.l}" y="0" width="${iw}" height="${H}"/></clipPath></defs>`;
+
+  for (const sh of opt.shade || []) {
+    const a = clampX(X(sh[0])), b = clampX(X(sh[1]));
+    if (b > a) g += `<rect x="${a}" y="${m.t}" width="${Math.max(1, b - a)}" height="${ih}" fill="${css("--c-batt")}"/>`;
+  }
+  if (opt.band) g += `<rect x="${m.l}" y="${Y(opt.band[1])}" width="${iw}" height="${Y(opt.band[0]) - Y(opt.band[1])}" fill="${css("--c-band")}"/>`;
+
+  for (const v of ticks) {
+    g += `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" stroke="${line}" stroke-width="1"/>`;
+    g += `<text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="${faint}">${fmt(v, opt.dec ?? (Math.abs(ticks[1] - ticks[0]) < 1 ? 1 : 0))}</text>`;
+  }
+  const span = t1 - t0, step = TIME_STEPS.find(s => span / s <= Math.max(2, iw / 95)) || 172800;
+  const off = new Date().getTimezoneOffset() * 60;
+  const lbl = step >= 86400 ? ddmm : step < 60 ? hhmmss : hhmm;
+  for (let t = Math.ceil((t0 - off) / step) * step + off; t <= t1; t += step) {
+    if (X(t) < m.l + 18 || X(t) > m.l + iw - 18) continue;
+    g += `<text x="${X(t)}" y="${H - 5}" text-anchor="middle" font-size="11" fill="${faint}">${lbl(t)}</text>`;
+  }
+
+  let paths = "";
+  for (const s of series) {
+    if (s.band) {          // полоса разброса: верхняя граница слева направо, нижняя — обратно
+      const lo = new Map(s.band[0].map(p => [p[0], p[1]]));
+      const d = s.band[1].filter(p => p[0] >= t0 - gap && p[0] <= t1 + gap);
+      let seg = [];
+      const flushBand = () => {
+        const q = seg.filter(p => p[1] != null && lo.get(p[0]) != null);
+        if (q.length > 1) paths += `<path d="M${q.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("L")}L${q.slice().reverse().map(p => X(p[0]).toFixed(1) + "," + Y(lo.get(p[0])).toFixed(1)).join("L")}Z" fill="${css(s.color)}" opacity=".18"/>`;
+        seg = [];
+      };
+      for (let i = 0; i < d.length; i++) {
+        if (d[i][1] == null || (i && d[i][0] - d[i - 1][0] > gap)) flushBand();
+        if (d[i][1] != null) seg.push(d[i]);
+      }
+      flushBand();
+    }
+    const d = s.data.filter(p => p[0] >= t0 - gap && p[0] <= t1 + gap);
+    let path = "", area = "", seg = [];
+    const xy = p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1);
+    const flush = () => {
+      if (!seg.length) return;
+      path += "M" + seg.map(xy).join("L");
+      if (s.area) area += `M${X(seg[0][0]).toFixed(1)},${Y(lo)}L` + seg.map(xy).join("L") + `L${X(seg[seg.length - 1][0]).toFixed(1)},${Y(lo)}Z`;
+      seg = [];
+    };
+    for (let i = 0; i < d.length; i++) {
+      if (d[i][1] == null || (i && d[i][0] - d[i - 1][0] > gap)) flush();
+      if (d[i][1] != null) seg.push(d[i]);
+    }
+    flush();
+    if (area) paths += `<path d="${area}" fill="${css(s.color)}" opacity=".12"/>`;
+    paths += `<path d="${path}" fill="none" stroke="${css(s.color)}" stroke-width="${s.width || 1.8}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  g += `<g clip-path="url(#clip-${el.id})">${paths}</g>`;
+  for (const mk of opt.marks || []) {
+    if (mk.t < t0 || mk.t > t1) continue;
+    g += `<g><title>${esc(full(mk.t) + " — " + mk.text)}</title><line x1="${X(mk.t)}" x2="${X(mk.t)}" y1="${m.t}" y2="${m.t + ih}" stroke="${css(mk.color)}" stroke-width="1" stroke-dasharray="2 3" opacity=".7"/><circle cx="${X(mk.t)}" cy="${m.t + 3}" r="3.5" fill="${css(mk.color)}"/></g>`;
+  }
+  g += `<line class="cur" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="${faint}" stroke-dasharray="3 3" visibility="hidden"/>`;
+  g += `<rect class="sel" x="0" y="${m.t}" width="0" height="${ih}" fill="${css("--accent")}" opacity=".15" visibility="hidden"/>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${g}</svg><div class="tip" hidden></div>`;
+
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip");
+  const cur = svg.querySelector(".cur"), sel = svg.querySelector(".sel");
+  const ref = series[0].data.filter(p => p[1] != null && p[0] >= t0 && p[0] <= t1);
+  const byT = series.map(s => new Map(s.data.map(p => [p[0], p[1]])));
+  const bandT = series.map(s => s.band ? [new Map(s.band[0].map(p => [p[0], p[1]])), new Map(s.band[1].map(p => [p[0], p[1]]))] : null);
+
+  const api = el._chart = {
+    hover(t) {
+      if (t == null || !ref.length || t < t0 || t > t1) { tip.hidden = true; cur.setAttribute("visibility", "hidden"); return; }
+      let lo2 = 0, hi2 = ref.length - 1;                       // двоичный поиск ближайшей точки
+      while (hi2 - lo2 > 1) { const mid = (lo2 + hi2) >> 1; if (ref[mid][0] < t) lo2 = mid; else hi2 = mid; }
+      const best = Math.abs(ref[lo2][0] - t) <= Math.abs(ref[hi2][0] - t) ? ref[lo2] : ref[hi2];
+      const x = X(best[0]);
+      cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("visibility", "visible");
+      tip.innerHTML = `<div class="t">${full(best[0])}</div>` + series.map((s, i) => {
+        const v = byT[i].get(best[0]);
+        const lo = bandT[i]?.[0].get(best[0]), hi = bandT[i]?.[1].get(best[0]);
+        const rng = lo != null && hi != null && hi - lo > Math.pow(10, -(s.dec ?? 1)) ? ` <span class="muted">(${fmt(lo, s.dec ?? 1)}–${fmt(hi, s.dec ?? 1)})</span>` : "";
+        return v != null ? `<div><span style="color:${css(s.color)}">●</span> ${s.name}: <b>${fmt(v, s.dec ?? 1)}</b> ${s.unit || ""}${rng}</div>` : "";
+      }).join("");
+      tip.hidden = false;
+      const w = tip.offsetWidth;
+      tip.style.left = (x + 12 + w > W ? x - w - 12 : x + 12) + "px";
+      tip.style.top = "4px";
+    },
+  };
+  CHARTS.push(api);
+
+  // выделение мышью (или пальцем по горизонтали) → увеличение всех графиков
+  let start = null;
+  const localX = ev => ev.clientX - svg.getBoundingClientRect().left;
+  svg.onpointerdown = ev => {
+    if (ev.button !== 0) return;
+    const x = localX(ev);
+    if (x < m.l || x > m.l + iw) return;
+    start = x; svg.setPointerCapture(ev.pointerId);
+    sel.setAttribute("x", x); sel.setAttribute("width", 0); sel.setAttribute("visibility", "visible");
+  };
+  svg.onpointermove = ev => {
+    const x = clampX(localX(ev));
+    if (start != null) {
+      sel.setAttribute("x", Math.min(start, x)); sel.setAttribute("width", Math.abs(x - start));
+      hoverAll(null);
+      tip.hidden = false;
+      tip.innerHTML = `<div class="t">${hhmmss(T(Math.min(start, x)))} – ${hhmmss(T(Math.max(start, x)))}</div><div>${dur(Math.abs(T(x) - T(start)))}</div>`;
+      tip.style.left = Math.min(Math.max(start, x) + 8, W - tip.offsetWidth) + "px"; tip.style.top = "4px";
+      return;
+    }
+    hoverAll(T(x));
+  };
+  const finish = ev => {
+    if (start == null) return;
+    const x = clampX(localX(ev)), a = T(Math.min(start, x)), b = T(Math.max(start, x));
+    start = null; sel.setAttribute("visibility", "hidden"); tip.hidden = true;
+    if (Math.abs(X(b) - X(a)) >= 6) zoomTo(a, b);
+  };
+  svg.onpointerup = finish;
+  svg.onpointercancel = () => { start = null; sel.setAttribute("visibility", "hidden"); };
+  svg.onpointerleave = () => { if (start == null) hoverAll(null); };
+  svg.ondblclick = () => resetView();
+}
+
+/* ---------- вид: пресет или увеличенный отрезок ---------- */
+function viewRange() {
+  if (S.view.zoom) return [S.view.t0, S.view.t1];
+  const now = S.now ? S.now.t : Math.floor(Date.now() / 1000);
+  return [now - PRESETS[S.view.preset], now];
+}
+
+function setView(v, push = true) {
+  if (push) S.stack.push(S.view);
+  S.view = v;
+  try {
+    history.replaceState(null, "", v.zoom ? `#${Math.round(v.t0)}-${Math.round(v.t1)}` : `#${v.preset}`);
+    if (!v.zoom) localStorage.setItem("range", v.preset);
+  } catch (e) {}
+  renderToolbar();
+  refresh();
+}
+function zoomTo(a, b) {
+  if (b - a < MIN_SPAN) { const c = (a + b) / 2; a = c - MIN_SPAN / 2; b = c + MIN_SPAN / 2; }
+  setView({ zoom: true, t0: a, t1: b });
+}
+function resetView() { S.stack = []; setView({ preset: S.view.zoom ? (S.lastPreset || "1h") : S.view.preset }, false); }
+function backView() { if (S.stack.length) setView(S.stack.pop(), false); else resetView(); }
+
+function renderToolbar() {
+  for (const b of $("range").children) b.classList.toggle("on", !S.view.zoom && b.dataset.r === S.view.preset);
+  if (!S.view.zoom) S.lastPreset = S.view.preset;
+  const z = S.view.zoom;
+  $("zoomInfo").hidden = !z; $("btnBack").hidden = !z; $("btnReset").hidden = !z; $("hint").hidden = !!z;
+  if (z) {
+    const sameDay = ddmm(S.view.t0) === ddmm(S.view.t1);
+    $("zoomInfo").innerHTML = `<b>${ddmm(S.view.t0)} ${hhmmss(S.view.t0)} – ${sameDay ? "" : ddmm(S.view.t1) + " "}${hhmmss(S.view.t1)}</b> · ${dur(S.view.t1 - S.view.t0)} · <span class="paused">обновление на паузе</span>`;
+  }
+}
+
+/* ---------- сводка по интервалу ---------- */
+function summary(rows, t0, t1, tier) {
+  const R = rows.filter(r => r.t >= t0 && r.t <= t1);
+  let energy = 0, battS = 0;
+  for (let i = 0; i < R.length; i++) {
+    const T = TIERS[R[i]._tier || tier];
+    const dt = Math.min(T.gap, (R[i + 1]?.t ?? Math.min(t1, R[i].t + T.step)) - R[i].t);
+    if (R[i].p != null) energy += R[i].p * dt;
+    if (R[i].batt) battS += dt;
+  }
+  const vals = k => R.map(r => r[k]).filter(v => v != null);
+  const avg = k => { const v = vals(k); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const max = (...ks) => { const v = ks.flatMap(vals); return v.length ? Math.max(...v) : null; };
+  const min = k => { const v = vals(k); return v.length ? Math.min(...v) : null; };
+  const wh = energy / 3600;
+  const ev = S.events.filter(e => e.t >= t0 && e.t <= t1);
+  const cap0 = R.find(r => r.cap != null)?.cap, cap1 = [...R].reverse().find(r => r.cap != null)?.cap;
+  const box = (label, value, sub = "") => `<div class="st"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+  $("sumBody").innerHTML = !R.length ? `<div class="muted">Нет данных за этот интервал</div>` :
+    `<div class="stats">
+      ${box("Энергия", wh < 1 ? `${fmt(wh * 1000, 1)} <small>мВт·ч</small>` : `${fmt(wh, 2)} <small>Вт·ч</small>`, `за ${dur(t1 - t0)}`)}
+      ${box("Мощность", `${fmt(avg("p"))} <small>Вт</small>`, `мин ${fmt(min("p"))} · макс ${fmt(max("p", "pmax"))}`)}
+      ${box("CPU", `${fmt(avg("cpu"), 1)} <small>%</small>`, `макс ${fmt(max("cpu", "cpumax"), 1)} %`)}
+      ${box("Память", `${fmt(avg("mu"), 2)} <small>ГБ</small>`, `макс ${fmt(max("mu"), 2)} ГБ`)}
+      ${box("Температура", `${fmt(max("tc"), 1)} <small>°C</small>`, `пик CPU · батарея до ${fmt(max("tb"), 1)} °C`)}
+      ${box("Заряд", cap0 == null ? "—" : `${cap0}${cap1 !== cap0 ? " → " + cap1 : ""} <small>%</small>`, battS ? `без сети ${dur(battS)}` : "сеть была всё время")}
+    </div>
+    <div class="sumfoot">Точность: ${(S.drawn?.tiers?.length ? S.drawn.tiers : [tier]).map(t => TIERS[t].label).join(", местами ")} · точек: ${R.length}${ev.length ? ` · событий: ${ev.length}` : ""}</div>
+    ${ev.length ? `<ul class="list sumev">${ev.slice(-8).reverse().map(e => `<li><span class="dot ${EV_KIND[e.kind] || ""}"></span><span class="name" style="white-space:normal">${esc(evText(e))}</span><span class="when">${hhmmss(e.t)}</span></li>`).join("")}</ul>` : ""}`;
+}
+
+/* ---------- отрисовка ---------- */
+let refreshSeq = 0;
+async function refresh() {
+  const seq = ++refreshSeq;
+  const [t0, t1] = viewRange();
+  const view = await loadView(t0, t1);
+  if (seq !== refreshSeq) return;            // пока грузили, вид уже сменился
+  S.drawn = { t0, t1, ...view };
+  drawCharts();
+}
+
+function drawCharts() {
+  if (!S.drawn) return;
+  const { t0, t1, tier, rows } = S.drawn;
+  const conf = S.now?.chglimit || { min: 70, max: 80 };
+  const width = $("chPower").clientWidth || 800;
+  const nb = Math.max(60, Math.round((width - 48) / 3));
+  const D = bucketize(rows, t0, t1, nb);
+  const used = S.drawn.tiers?.length ? S.drawn.tiers : [tier];
+  const gap = Math.max(...used.map(t => TIERS[t].gap), (t1 - t0) / nb * 2.5);
+  const col = k => D.map(r => [r.t, r[k] ?? null]);
+  const band = k => [col(k + "_lo"), col(k + "_hi")];
+  const shade = (() => {
+    const out = []; let a = null, prev = null;
+    const st = r => TIERS[r._tier || tier].step;
+    let last = null;
+    for (const r of D) { if (r.batt) { if (a == null) a = r.t; prev = r.t; last = r; } else if (a != null) { out.push([a, prev + st(last)]); a = null; } }
+    if (a != null) out.push([a, prev + st(last)]);
+    return out;
+  })();
+  const marks = S.events.map(e => ({ t: e.t, text: evText(e), color: e.kind === "power" ? "--warn" : e.kind === "temp" ? "--bad" : "--faint" }));
+  const empty = S.view.zoom ? "Нет данных за этот интервал" : tier === "hist" ? "История пишется раз в 5 минут — данные копятся" : "Данные копятся…";
+  CHARTS.length = 0;
+  chart($("chPower"), { t0, t1, gap, shade, marks, floor: 0, yPad: .15, minSpan: .5, empty, series: [
+    { name: "среднее", data: col("p"), band: band("p"), color: "--c-power", unit: "Вт", dec: 2 },
+  ] });
+  const caps = D.map(r => r.cap).filter(v => v != null);
+  chart($("chCap"), { t0, t1, gap, shade, yMin: Math.min(conf.min - 10, ...caps), yMax: 100,
+    band: [conf.min, conf.max], dec: 0, empty,
+    series: [{ name: "заряд", data: col("cap"), color: "--c-cap", unit: "%", dec: 0 }] });
+  chart($("chCpu"), { t0, t1, gap, floor: 0, yMin: 0, yPad: .15, minSpan: 10, dec: 0, empty, series: [
+    { name: "среднее", data: col("cpu"), band: band("cpu"), color: "--c-cpu", unit: "%", dec: 1 },
+    { name: "ожидание диска", data: col("iow"), color: "--c-iow", width: 1.2, unit: "%", dec: 1 },
+  ] });
+  chart($("chMem"), { t0, t1, gap, yMin: 0, yMax: S.now ? S.now.mem.total_mb / 1024 : null, dec: 0, empty, series: [
+    { name: "занято", data: col("mu"), color: "--c-mem", area: true, unit: "ГБ", dec: 2 },
+    { name: "кэш", data: col("mc"), color: "--c-cache", width: 1.2, unit: "ГБ", dec: 2 },
+  ] });
+  chart($("chTemp"), { t0, t1, gap, yPad: .2, minSpan: 6, dec: 0, empty, series: [
+    { name: "батарея", data: col("tb"), color: "--c-tb", unit: "°C" },
+    { name: "CPU", data: col("tc"), color: "--c-tc", unit: "°C" },
+  ] });
+  chart($("chSig"), { t0, t1, gap, yPad: .2, minSpan: 10, dec: 0, empty,
+    series: [{ name: "сигнал", data: col("sig"), color: "--c-sig", unit: "дБм", dec: 0 }] });
+  summary(rows, t0, t1, tier);
+  $("sumTitle").textContent = S.view.zoom ? "Выбранный отрезок" : `Сводка за ${{ "1h": "час", "24h": "сутки", "7d": "неделю" }[S.view.preset]}`;
+}
+
+/* ---------- плитки и панели ---------- */
+const MODE = {
+  drain: (c) => `Разряд до ${c.max}% — питание от батареи`,
+  hold: (c) => `Окно ${c.min}–${c.max}%, батарея не заряжается`,
+  charge: (c, svc) => svc === "started" ? `Зарядка до ${c.max}%` : "Обычная зарядка (сервис выключен)",
+};
+const SVC_STATE = { started: ["ok", "работает"], stopped: ["", "остановлен"], failed: ["bad", "ошибка"], crashed: ["bad", "упал"] };
+const DOCKER_STATE = { running: ["ok", "работает"], exited: ["", "остановлен"], created: ["", "создан"], paused: ["warn", "на паузе"], restarting: ["warn", "перезапуск"], dead: ["bad", "мёртв"] };
+const EV_KIND = { power: "warn", charge: "ok", wifi: "", service: "", docker: "", temp: "bad", boot: "" };
+const CHG_WORD = { drain: "Разряд", hold: "Удержание", charge: "Зарядка", start: "Сервис запущен", stop: "Сервис остановлен" };
+
+function sigQuality(s) {
+  if (s == null) return [0, "нет данных"];
+  if (s >= -55) return [4, "отличный"];
+  if (s >= -67) return [3, "хороший"];
+  if (s >= -75) return [2, "средний"];
+  return [1, "слабый"];
+}
+
+function renderNow() {
+  const n = S.now; if (!n) return;
+  const p = n.power, c = n.chglimit, w = n.wifi || {};
+  $("tPower").innerHTML = `${fmt(p.p)}<small>Вт</small>`;
+  $("tPowerMeta").innerHTML = `<b>${p.i}</b> мА · CPU <b>${fmt(p.tc, 1)}</b> °C`;
+
+  const fromUsb = p.src === "usb";
+  $("tSrc").innerHTML = fromUsb ? "Сеть" : (p.cable ? "Батарея" : "Батарея<small>нет сети</small>");
+  $("tSrc").style.color = !fromUsb && !p.cable ? css("--warn") : "";
+  $("tMode").textContent = MODE[p.mode](c, n.services?.["avicii-chglimit"]);
+
+  $("tCap").innerHTML = `${p.cap}<small>%</small>`;
+  $("capFill").style.width = p.cap + "%";
+  $("capWin").style.left = c.min + "%"; $("capWin").style.width = (c.max - c.min) + "%";
+  const bi = p.ib > 0 ? `разряд ${p.ib} мА` : p.ib < 0 ? `заряд ${-p.ib} мА` : "ток 0";
+  $("tBatt").innerHTML = `<b>${fmt(p.tb, 1)}</b> °C · ${bi} · циклов ${n.cycles}`;
+
+  const cpu = n.cpu;
+  if (cpu) {
+    $("tCpu").innerHTML = `${fmt(cpu.busy, 1)}<small>%</small><small>· нагрузка ${n.loadavg[0]}</small>`;
+    $("tCl").innerHTML = cpu.clusters.map(c =>
+      `<div class="cl"><span>${c.name}${c.cpus.length > 1 ? " ×" + c.cpus.length : ""}</span><div class="meter"><i style="width:${Math.min(100, c.busy)}%"></i></div><span>${c.cur} МГц</span></div>`
+    ).join("");
+  }
+  const gb = mb => (mb / 1024).toFixed(1).replace(".", ",");
+  const mm = n.mem;
+  $("tMem").innerHTML = `${gb(mm.used_mb)}<small>из ${gb(mm.total_mb)} ГБ</small>`;
+  $("memUsed").style.width = (100 * mm.used_mb / mm.total_mb) + "%";
+  $("memCache").style.width = (100 * (mm.cache_mb || 0) / mm.total_mb) + "%";
+  $("tMemMeta").innerHTML = `занято <b>${gb(mm.used_mb)}</b> · кэш <b>${gb(mm.cache_mb || 0)}</b> · доступно <b>${gb(mm.avail_mb || 0)}</b> ГБ`;
+
+  if (w.connected) {
+    const [q, label] = sigQuality(w.signal);
+    const bars = [1, 2, 3, 4].map(i => `<i class="${i <= q ? "on" : ""}" style="height:${4 + i * 2.5}px"></i>`).join("");
+    $("tSig").innerHTML = `<span class="bars">${bars}</span>${w.signal}<small>дБм</small>`;
+    $("tWifi").innerHTML = `${esc(w.ssid)} · ${label} · ${w.freq >= 5000 ? "5" : "2,4"} ГГц · ${Math.round(w.tx)} Мбит/с<br>${esc(w.ip || "")}`;
+  } else {
+    $("tSig").innerHTML = `<span style="color:${css("--bad")}">нет связи</span>`;
+    $("tWifi").textContent = "";
+  }
+
+  const mem = n.mem, disk = n.disk || {};
+  const meter = pct => `<div class="meter"><i style="width:${Math.min(100, pct)}%"></i></div>`;
+  $("sys").innerHTML = `
+    <dt>Работает</dt><dd>${dur(n.uptime)}</dd>
+    <dt>Нагрузка</dt><dd>${n.loadavg.join(" · ")}</dd>
+    <dt>Память</dt><dd>${(mem.used_mb / 1024).toFixed(1).replace(".", ",")} из ${(mem.total_mb / 1024).toFixed(1).replace(".", ",")} ГБ${meter(mem.pct)}</dd>
+    <dt>Диск</dt><dd>${fmt(disk.used_gb, 1)} из ${fmt(disk.total_gb, 0)} ГБ${meter(100 * disk.used_gb / disk.total_gb)}</dd>
+    <dt>CPU</dt><dd>${fmt(p.tc, 1)} °C</dd>
+    ${(n.cpu?.clusters || []).map(c => `<dt>${c.name}</dt><dd>${c.min}–${c.max} МГц · ${esc(c.gov)}</dd>`).join("")}
+    <dt>Батарея</dt><dd>${esc(n.health || "")} · ${n.cycles} циклов</dd>`;
+
+  $("svc").innerHTML = Object.entries(n.services || {}).map(([k, v]) => {
+    const [cls, label] = SVC_STATE[v] || ["", v];
+    return `<li><span class="dot ${cls}"></span><span class="name">${esc(k)}</span><span class="state">${label}</span></li>`;
+  }).join("");
+
+  const dk = n.docker;
+  $("docker").innerHTML = dk == null ? `<li class="muted">Docker недоступен</li>`
+    : !dk.length ? `<li class="muted">Контейнеров нет</li>`
+    : dk.map(x => {
+      const [cls, label] = DOCKER_STATE[x.state] || ["", x.state];
+      return `<li><span class="dot ${cls}"></span><span class="name" title="${esc(x.status)}">${esc(x.name)} <span class="muted">· ${esc(x.image)}</span></span><span class="state">${label}</span></li>`;
+    }).join("");
+}
+
+function evText(e) {
+  if (e.kind !== "charge") return e.text;
+  const m = e.text.match(/^(\w+):\s*(.*)$/);
+  return m && CHG_WORD[m[1]] ? `${CHG_WORD[m[1]]}: ${m[2]}` : e.text;
+}
+
+function renderEvents() {
+  const ev = S.events.slice().reverse();
+  $("events").innerHTML = ev.length ? ev.map(e =>
+    `<li><span class="dot ${EV_KIND[e.kind] || ""}"></span><span class="name" style="white-space:normal">${esc(evText(e))}</span><span class="when" title="${full(e.t)}">${ago(e.t)}</span></li>`
+  ).join("") : `<li class="muted">Событий пока нет</li>`;
+}
+
+function renderLive() {
+  const age = S.now ? Date.now() / 1000 - S.now.t : Infinity;
+  const ok = age < 3 * (S.now?.sample_s || 5);
+  $("liveDot").className = "dot " + (ok ? "ok" : age < 120 ? "warn" : "bad");
+  $("liveText").textContent = !S.now ? "нет данных" : ok ? `обновлено ${hhmm(S.now.t)}:${pad(new Date(S.now.t * 1000).getSeconds())}` : `данные устарели (${dur(age)})`;
+}
+
+/* ---------- опрос ---------- */
+async function pollFast() {
+  try {
+    S.now = await get("now.json");
+    renderNow();
+    if (!S.view.zoom || !S.drawn) await refresh();   // увеличенный отрезок не обновляем, но первый раз рисуем
+  } catch (e) { console.warn(e); }
+  renderLive();
+}
+async function pollEvents() { try { S.events = await get("events.json"); renderEvents(); } catch (e) { console.warn(e); } }
+async function pollHist() {
+  try {
+    S.hist = rowsOf(await get("history.json"));
+    if (!S.view.zoom && S.drawn?.tier === "hist") await refresh();
+  } catch (e) { console.warn(e); }
+}
+
+$("range").onclick = e => {
+  const r = e.target.dataset?.r; if (!r) return;
+  S.stack = [];
+  setView({ preset: r }, false);
+};
+$("btnBack").onclick = backView;
+$("btnReset").onclick = resetView;
+addEventListener("keydown", e => { if (e.key === "Escape" && S.view.zoom) backView(); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawCharts);
+
+(function initView() {
+  const h = location.hash.slice(1), z = h.match(/^(\d+)-(\d+)$/);
+  let saved = null; try { saved = localStorage.getItem("range"); } catch (e) {}
+  if (z && +z[2] > +z[1]) S.view = { zoom: true, t0: +z[1], t1: +z[2] };
+  else S.view = { preset: PRESETS[h] ? h : PRESETS[saved] ? saved : "1h" };
+  renderToolbar();
+})();
+
+Promise.all([pollEvents(), pollHist()]).then(pollFast);
+setInterval(pollFast, 5000);
+setInterval(pollEvents, 10000);
+setInterval(pollHist, 60000);
+setInterval(renderLive, 1000);
+setInterval(renderEvents, 30000);
+</script>
+</body>
+</html>

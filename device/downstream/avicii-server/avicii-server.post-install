@@ -1,0 +1,36 @@
+#!/bin/sh
+# Idempotent: also used as post-upgrade.
+
+for s in avicii-chglimit avicii-monitor avicii-monitor-web; do
+	rc-update add "$s" default >/dev/null 2>&1
+done
+rc-update add avicii-user-setup boot >/dev/null 2>&1
+for s in containerd docker; do
+	rc-update add "$s" default >/dev/null 2>&1
+done
+
+# Docker on the 4.19 kernel. /etc/conf.d/docker belongs to docker-openrc,
+# so our lines live in a marked block that pre-deinstall removes again:
+# - nf_tables in 4.19 is too old for iptables 1.8, use the legacy backend
+# - the vendor schedtune cgroup allows ~5 groups, crun fails with ENOMEM
+conf=/etc/conf.d/docker
+if [ -f "$conf" ] && ! grep -q '^# avicii-server begin' "$conf"; then
+	cat >> "$conf" <<'BLOCK'
+# avicii-server begin
+export PATH="/usr/lib/avicii-server/docker-bin:$PATH"
+umount /sys/fs/cgroup/schedtune 2>/dev/null || true
+# avicii-server end
+BLOCK
+fi
+
+# cgroup v2 has no devices controller, crun would need eBPF on 4.19
+if ! grep -q '^rc_cgroup_mode="legacy"' /etc/rc.conf; then
+	sed -i 's/^#\?rc_cgroup_mode=.*/rc_cgroup_mode="legacy"/' /etc/rc.conf
+	grep -q '^rc_cgroup_mode=' /etc/rc.conf || echo 'rc_cgroup_mode="legacy"' >> /etc/rc.conf
+fi
+
+# bash and the docker group for the default user. On a fresh install the
+# user does not exist yet; the avicii-user-setup boot service does it then.
+/usr/libexec/avicii-user-setup || true
+
+exit 0

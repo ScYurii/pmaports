@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+description="Login shell and docker group for the default user (once)"
+
+depend() {
+	need localmount
+	before dropbear sshd
+}
+
+start() {
+	[ -e /var/lib/avicii-server/user-setup-done ] && return 0
+	ebegin "Setting up the default user"
+	/usr/libexec/avicii-user-setup
+	eend $?
+}
