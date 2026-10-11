@@ -4,5 +4,7 @@ for s in avicii-monitor-web avicii-monitor avicii-chglimit; do
 	rc-update del "$s" default >/dev/null 2>&1
 done
 rc-update del avicii-user-setup boot >/dev/null 2>&1
+rc-service avicii-firewall stop >/dev/null 2>&1
+rc-update del avicii-firewall boot >/dev/null 2>&1
 sed -i '/^# avicii-server begin$/,/^# avicii-server end$/d' /etc/conf.d/docker 2>/dev/null
 exit 0

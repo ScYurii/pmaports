@@ -5,6 +5,7 @@ for s in avicii-chglimit avicii-monitor avicii-monitor-web; do
 	rc-update add "$s" default >/dev/null 2>&1
 done
 rc-update add avicii-user-setup boot >/dev/null 2>&1
+rc-update add avicii-firewall boot >/dev/null 2>&1
 for s in containerd docker; do
 	rc-update add "$s" default >/dev/null 2>&1
 done

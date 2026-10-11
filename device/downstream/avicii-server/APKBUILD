@@ -6,10 +6,12 @@
 # - Docker workarounds for the downstream 4.19 kernel (crun instead of runc,
 #   iptables-legacy, cgroup v1, no schedtune), docker enabled at boot
 # - bash and the docker group for the default user
+# - avicii-firewall: inbound firewall on iptables-legacy (nftables does not
+#   work on 4.19); SSH and the dashboards only from the home network
 maintainer="Yurii <selestyn@gmail.com>"
 pkgname=avicii-server
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Home server setup for OnePlus Nord (downstream kernel)"
 url="https://postmarketos.org"
 arch="aarch64"
@@ -42,6 +44,9 @@ source="
 	avicii-docker-modules.conf
 	avicii-user-setup.sh
 	avicii-user-setup.initd
+	avicii-firewall.sh
+	avicii-firewall.initd
+	avicii-firewall.confd
 	"
 builddir="$srcdir"
 options="!check"
@@ -67,6 +72,10 @@ package() {
 
 	install -Dm755 avicii-user-setup.sh "$pkgdir"/usr/libexec/avicii-user-setup
 	install -Dm755 avicii-user-setup.initd "$pkgdir"/etc/init.d/avicii-user-setup
+
+	install -Dm755 avicii-firewall.sh "$pkgdir"/usr/libexec/avicii-firewall
+	install -Dm755 avicii-firewall.initd "$pkgdir"/etc/init.d/avicii-firewall
+	install -Dm644 avicii-firewall.confd "$pkgdir"/etc/conf.d/avicii-firewall
 }
 sha512sums="
 f4d2f56e24940e0d8eb3b6bb5ecbe43de07c54c3d23050009d136420aab5adda53532fbabce1d9f59fc72dd5b118864767ba708814a47456759a9176048a4eaa  avicii-chglimit.sh
@@ -82,4 +91,7 @@ dbec3f2f51952383506f32798f94bb23ac969673bdac09954cbc246455da2eb27a3dfbcef5499640
 0633439067fae549fc723ea1fab34404af898a6d7079fe648837b08f22c688111035e73ecf527cadca9ab78cd8a48032d8c960aac7536b1a171e3c0d314bfbd1  avicii-docker-modules.conf
 2f85bdece9385ba94f502f1baeecd96d0d877502df3e9856ae2af09f5d82979309d421af8a36ce07f3b8b29668b27d96a484713af0631e178519fcc874bc450b  avicii-user-setup.sh
 8b693d6c26cb0f7b0a9d43cffaf0f8e5a7c0854b953bfd92f672cc3a3161b77a3e68d5a02c90fe3161baca3e07e247bf119e1d4a4f04e410cbd538f1fd1f2250  avicii-user-setup.initd
+e2b266aabf6e37ea252bafc0cf8b836e58eae152b547d743d4c122e6f8aafc7a84004f38d2418846486f7b7c4f7368f96c2723375026962c4c3017b7ff547150  avicii-firewall.sh
+002b413bc6cd7041e41ca3e263497c3a8adcd56335f6f2a1ba119c74466101421fecd2bc1cef7c519a20c937c80e20dc8fbe3a1b88b3e726d9d748326a920d9b  avicii-firewall.initd
+d1be38fb7948b1a2f5e70910d7cbc8f42e990879e3c8e8030e829520181a37fbc7cdccdc95b6e4218b956c6ac2651a3a57dc1be829a20cef155bd178abf8d58e  avicii-firewall.confd
 "

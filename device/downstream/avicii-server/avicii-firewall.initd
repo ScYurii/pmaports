@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+
+description="Файрвол входящих соединений (iptables-legacy)"
+
+depend() {
+	before net docker
+}
+
+start() {
+	export LAN TCP_PORTS USB_IF WAN_IF
+	ebegin "Применяю правила файрвола"
+	/usr/libexec/avicii-firewall start
+	eend $?
+}
+
+stop() {
+	ebegin "Снимаю правила файрвола"
+	/usr/libexec/avicii-firewall stop
+	eend $?
+}
