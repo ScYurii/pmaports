@@ -13,15 +13,27 @@
                     CSV и дозапись строкой, чтобы стоимость не росла к концу часа
   min/<сутки>.json — средние по минуте за неделю, номер суток = t // 86400;
                      источник — /var/lib/avicii-monitor/minute.csv (~100 байт в минуту)
+
+Оповещения в Telegram (пропало/вернулось питание от сети, заряд упал до LOW_CAP %) —
+если есть /etc/avicii-monitor/telegram.ini (как у бота: [telegram] token, chat_id; права 600).
+
+Пинг healthchecks.io раз в HC_S секунд (заряд и питание в теле запроса) — если в
+/etc/avicii-monitor/healthchecks.url есть адрес пинга (права 600). Пропали пинги — телефон
+выключен, без сети или сборщик упал; об этом оповещает уже сам healthchecks.io.
 """
 
+import configparser
 import glob
 import http.client
 import json
 import os
+import queue
 import socket
 import subprocess
+import threading
 import time
+import urllib.parse
+import urllib.request
 from collections import deque
 
 SAMPLE_S = 5
@@ -61,6 +73,14 @@ MIN_FILE = f"{VAR}/minute.csv"
 MIN_CHUNK = 86400
 MIN_KEEP = 7 * 24 * 3600
 
+TG_CONF = "/etc/avicii-monitor/telegram.ini"
+TG_RETRY_S = 30
+TG_GIVE_UP_S = 6 * 3600              # старше — уже не актуально
+LOW_CAP = 30                         # оповещение о разряде, %
+LOW_CAP_RESET = 35                   # снова сработает после подзарядки выше этого
+HC_CONF = "/etc/avicii-monitor/healthchecks.url"
+HC_S = 60
+
 
 def rd(path, default=None):
     try:
@@ -85,6 +105,82 @@ def write_json(name, obj):
         f.write(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
     os.chmod(tmp, 0o644)
     os.replace(tmp, f"{RUN}/{name}")
+
+
+def secret_file(path):
+    """Файл с секретом: None, если его нет или он доступен не только владельцу."""
+    try:
+        if os.stat(path).st_mode & 0o077:
+            print(f"{time.strftime('%F %T')} {path} доступен другим, chmod 600 — не используется", flush=True)
+            return None
+    except OSError:
+        return None
+    return rd(path)
+
+
+class Healthchecks:
+    """Пинг в фоне раз в HC_S секунд; status() даёт (замеры свежие, строка состояния)."""
+
+    def __init__(self, status, path=HC_CONF):
+        self.url = (secret_file(path) or "").strip()
+        self.status = status
+        if self.url:
+            threading.Thread(target=self.run, daemon=True).start()
+
+    def run(self):
+        while True:
+            ok, text = self.status()
+            try:
+                # сборщик завис (поток жив, замеров нет) — /fail, оповещение сразу
+                with urllib.request.urlopen(self.url + ("" if ok else "/fail"), text.encode(), timeout=20):
+                    pass
+            except Exception as e:
+                # в URL секретный UUID: текст исключения не выводим
+                print(f"{time.strftime('%F %T')} healthchecks: {type(e).__name__}", flush=True)
+            time.sleep(HC_S)
+
+
+class Telegram:
+    """Отправка в фоне: без сети сообщения ждут и повторяются, замеры не тормозят."""
+
+    def __init__(self, path=TG_CONF):
+        self.q = queue.Queue()
+        c = configparser.ConfigParser()
+        try:
+            text = secret_file(path)
+            if text is None:
+                self.url = None     # нет файла — оповещения выключены
+                return
+            c.read_string(text)
+            self.url = f"https://api.telegram.org/bot{c['telegram']['token'].strip()}/sendMessage"
+            self.chat_id = c["telegram"]["chat_id"].strip()
+        except (KeyError, configparser.Error):
+            self.url = None
+            return
+        threading.Thread(target=self.run, daemon=True).start()
+
+    def send(self, text):
+        if self.url:
+            self.q.put((time.time(), text))
+
+    def post(self, text):
+        data = urllib.parse.urlencode({"chat_id": self.chat_id, "text": text}).encode()
+        with urllib.request.urlopen(self.url, data, timeout=20) as r:
+            if not json.load(r).get("ok"):
+                raise RuntimeError("ok=false")
+
+    def run(self):
+        while True:
+            t, text = self.q.get()
+            while time.time() - t < TG_GIVE_UP_S:
+                late = time.time() - t > 2 * TG_RETRY_S
+                try:
+                    self.post(text + (f"\n(событие {time.strftime('%H:%M', time.localtime(t))})" if late else ""))
+                    break
+                except Exception as e:
+                    # в URL токен: текст исключения не выводим
+                    print(f"{time.strftime('%F %T')} telegram: {type(e).__name__}, повтор", flush=True)
+                    time.sleep(TG_RETRY_S)
 
 
 CLUSTER_NAMES = ["малые", "большое", "топовое"]
@@ -230,6 +326,9 @@ class Monitor:
         self.raw_key = None
         self.minutes = deque(maxlen=MIN_KEEP // MIN_S)
         self.min_key, self.min_rows = None, []
+        self.tg = Telegram()
+        self.low = False
+        self.hc = Healthchecks(self.hc_status)
         self.load_history()
         self.load_raw()
         self.load_minutes()
@@ -535,10 +634,22 @@ class Monitor:
         self.live.append(s)
         self.add_raw(s)
 
+        first = "cable" not in self.prev
         ch, _ = self.changed("cable", s["cable"])
         if ch:
             self.event("power", "Питание от сети восстановлено" if s["cable"]
                        else "Питание от сети пропало — работа от батареи")
+        if ch or (first and not s["cable"]):
+            self.tg.send(f"🔌 Телефон-сервер: питание от сети восстановлено, заряд {s['cap']}%"
+                         if s["cable"] else
+                         f"⚠️ Телефон-сервер: нет питания от сети, работает от батареи, заряд {s['cap']}%")
+        if not self.low and s["cap"] <= LOW_CAP:
+            self.low = True
+            self.event("power", f"Батарея разряжена до {s['cap']}%")
+            self.tg.send(f"🪫 Телефон-сервер: батарея разряжена до {s['cap']}%"
+                         + ("" if s["cable"] else ", питания от сети нет"))
+        elif self.low and s["cap"] >= LOW_CAP_RESET:
+            self.low = False
         hot = s["tb"] >= 40 or (self.prev.get("hot") and s["tb"] >= 38)
         ch, _ = self.changed("hot", hot)
         if ch:
@@ -561,6 +672,15 @@ class Monitor:
             self.add_minute(now)
         if int(now) // HIST_S != int(now - SAMPLE_S) // HIST_S:
             self.aggregate(now)
+
+    def hc_status(self):
+        if not self.live:
+            return True, "нет замеров"     # только что запустились
+        s = self.live[-1]
+        if time.time() - s["t"] > HC_S:
+            return False, f"нет замеров с {time.strftime('%F %T', time.localtime(s['t']))}"
+        return True, (f"заряд {s['cap']}%, {'от сети' if s['cable'] else 'от батареи'}, "
+                f"{s['p']} Вт, батарея {s['tb']} °C")
 
     def chglimit_conf(self):
         conf = {}

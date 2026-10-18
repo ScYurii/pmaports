@@ -2,7 +2,9 @@
 # - avicii-chglimit: keeps the battery between 70 and 80% on mains power
 #   (OPLUS mmi_charging_enable + input_suspend)
 # - avicii-power: live power draw in the terminal
-# - avicii-monitor: metrics collector and web dashboard on port 8080
+# - avicii-monitor: metrics collector and web dashboard on port 8080, Telegram
+#   alerts on mains power loss and low battery, healthchecks.io ping
+#   (/etc/avicii-monitor/telegram.ini, healthchecks.url)
 # - Docker workarounds for the downstream 4.19 kernel (crun instead of runc,
 #   iptables-legacy, cgroup v1, no schedtune), docker enabled at boot
 # - bash and the docker group for the default user
@@ -11,7 +13,7 @@
 maintainer="Yurii <selestyn@gmail.com>"
 pkgname=avicii-server
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Home server setup for OnePlus Nord (downstream kernel)"
 url="https://postmarketos.org"
 arch="aarch64"
@@ -62,6 +64,7 @@ package() {
 	install -Dm755 avicii-monitor-web.initd "$pkgdir"/etc/init.d/avicii-monitor-web
 	install -Dm644 avicii-monitor.html "$pkgdir"/usr/share/avicii-monitor/www/index.html
 	install -Dm644 avicii-monitor-httpd.conf "$pkgdir"/usr/share/avicii-monitor/httpd.conf
+	install -dm700 "$pkgdir"/etc/avicii-monitor
 	ln -s /run/avicii-monitor "$pkgdir"/usr/share/avicii-monitor/www/data
 
 	install -Dm644 avicii-docker-daemon.json "$pkgdir"/etc/docker/daemon.json
@@ -82,7 +85,7 @@ f4d2f56e24940e0d8eb3b6bb5ecbe43de07c54c3d23050009d136420aab5adda53532fbabce1d9f5
 050e8cd8a02fbf3c969b02a823a5cc22af3f797164875d63b08ff011101300e8a6781a512ad37e768dd438b346c2271fdd4baca90d2ddf7ed0dc72fbe65f2724  avicii-chglimit.initd
 845c5969f4b46082b75f688fc3eeb2a51463ece39c23bdf00d3c064dd03b1af6a90e7ca1f40abfced0d76db7af506920c5f9aab8a1052a001511684d3ecfada7  avicii-chglimit.confd
 cb4ec2f8d48f4171f5b21d52bb57693b1bd0edc36cb5dae68c048b17e78fb1ebb66aee6cdc49ba4f702b6c53a4feb6994c180a94a7aaaa5cb7082cd3ff29ee8a  avicii-power.sh
-6704bb45705b1a38400716a41108f158c8e59805ab42af24a9fa5d07f4aab13081e4637e8962c1d57592384ff0a2c25b81fd5d286e24b152826c8aa8095bb6be  avicii-monitor.py
+cd3b4d4a9923b2f747983ac5938c83397f8521ac9e6ee8d63a05d8802935c93f56442276bf579e7547d67c0641fe44348dc6ecd83101644d1bb67275bb064bda  avicii-monitor.py
 eb5841f7ee12ed5430d9f0ed440716403f6a3bf6d100f01d720c1264f58160e4e4ffd6f170a591a2a287898f228d56e9d1a0f4b32d03441f2afbe087c2fa2ea8  avicii-monitor.initd
 8c1adb9df238cbdd3350cef13e76a7ee0766ca763131d262ca6f20614dcc2a4be4831497536e105c2a5a674125791199dc0b62b9c2978d0f643b5c5a47be1bf0  avicii-monitor-web.initd
 dbec3f2f51952383506f32798f94bb23ac969673bdac09954cbc246455da2eb27a3dfbcef5499640e7d7dbc49f33d624393f0e8a62eafe4cdf3e538d7341ea27  avicii-monitor.html
